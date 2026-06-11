@@ -1,16 +1,8 @@
-import { createTitleHash } from "@/lib/hash";
 import { getApiKey, getOpenAIClient } from "@/lib/openai";
 import {
   buildOfficialNewsPrompt,
   OFFICIAL_NEWS_SYSTEM_PROMPT,
 } from "@/lib/prompts/official-news";
-
-export function createOfficialContentHash(
-  title: string,
-  content: string
-): string {
-  return createTitleHash(`${title}\n${content}`);
-}
 
 export async function generateOfficialAnalysis(
   title: string,

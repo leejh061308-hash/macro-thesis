@@ -54,20 +54,30 @@ export interface NewsItem {
   source: string;
 }
 
-export interface OfficialNewsItem {
+export interface MainNewsItem {
   id: number;
   title: string;
-  content: string;
-  eventType?: string;
+  summary: string;
+  sourceUrl: string | null;
+  publishedAt: string;
+  createdAt: string;
   aiAnalysis: string;
   aiAnalysisPending?: boolean;
-  publishedAt: string;
 }
 
-export interface CreateOfficialNewsRequest {
+export interface CreateMainNewsRequest {
   title: string;
-  content: string;
-  eventType?: string;
+  summary: string;
+  sourceUrl?: string;
+  publishedAt?: string;
+}
+
+export interface UpdateMainNewsRequest {
+  id: number;
+  title?: string;
+  summary?: string;
+  sourceUrl?: string | null;
+  publishedAt?: string;
 }
 
 export interface StockAnalysis {

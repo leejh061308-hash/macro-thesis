@@ -55,15 +55,6 @@ function initSchema(database: Database.Database) {
       value TEXT NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS official_news (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL,
-      content TEXT NOT NULL,
-      event_type TEXT,
-      content_hash TEXT NOT NULL,
-      ai_analysis TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
   `);
 
   // v2: title_hash 컬럼 추가 — 기존 캐시(잘못된 ID) 제거
@@ -214,86 +205,4 @@ export function cacheSummary(
          created_at = datetime('now')`
     )
     .run(articleId, titleHash, aiSummary);
-}
-
-export interface OfficialNewsRow {
-  id: number;
-  title: string;
-  content: string;
-  eventType: string | null;
-  contentHash: string;
-  aiAnalysis: string | null;
-  createdAt: string;
-}
-
-export function getOfficialNews(): OfficialNewsRow[] {
-  const database = getDb();
-  return database
-    .prepare(
-      `SELECT id, title, content, event_type as eventType, content_hash as contentHash,
-              ai_analysis as aiAnalysis, created_at as createdAt
-       FROM official_news
-       ORDER BY created_at DESC`
-    )
-    .all() as OfficialNewsRow[];
-}
-
-export function getOfficialNewsById(id: number): OfficialNewsRow | null {
-  const database = getDb();
-  const row = database
-    .prepare(
-      `SELECT id, title, content, event_type as eventType, content_hash as contentHash,
-              ai_analysis as aiAnalysis, created_at as createdAt
-       FROM official_news WHERE id = ?`
-    )
-    .get(id) as OfficialNewsRow | undefined;
-  return row ?? null;
-}
-
-export function createOfficialNews(
-  title: string,
-  content: string,
-  eventType: string | null,
-  contentHash: string,
-  aiAnalysis: string | null
-): OfficialNewsRow {
-  const database = getDb();
-  const result = database
-    .prepare(
-      `INSERT INTO official_news (title, content, event_type, content_hash, ai_analysis)
-       VALUES (?, ?, ?, ?, ?)`
-    )
-    .run(title, content, eventType, contentHash, aiAnalysis);
-
-  const row = getOfficialNewsById(Number(result.lastInsertRowid));
-  if (!row) throw new Error("Failed to create official news");
-  return row;
-}
-
-export function updateOfficialNewsAnalysis(id: number, aiAnalysis: string) {
-  const database = getDb();
-  database
-    .prepare("UPDATE official_news SET ai_analysis = ? WHERE id = ?")
-    .run(aiAnalysis, id);
-}
-
-export function deleteOfficialNews(id: number): boolean {
-  const database = getDb();
-  const result = database
-    .prepare("DELETE FROM official_news WHERE id = ?")
-    .run(id);
-  return result.changes > 0;
-}
-
-export function getOfficialNewsPendingAnalysis(): OfficialNewsRow[] {
-  const database = getDb();
-  return database
-    .prepare(
-      `SELECT id, title, content, event_type as eventType, content_hash as contentHash,
-              ai_analysis as aiAnalysis, created_at as createdAt
-       FROM official_news
-       WHERE ai_analysis IS NULL OR ai_analysis = ''
-       ORDER BY created_at DESC`
-    )
-    .all() as OfficialNewsRow[];
 }

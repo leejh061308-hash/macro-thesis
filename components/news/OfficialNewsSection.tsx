@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import OfficialNewsCard from "@/components/news/OfficialNewsCard";
 import OfficialNewsForm from "@/components/news/OfficialNewsForm";
-import type { OfficialNewsItem } from "@/lib/types";
+import type { MainNewsItem } from "@/lib/types";
 
 const ADMIN_KEY_STORAGE = "macrolens_admin_key";
 const TITLE_TAP_WINDOW_MS = 600;
@@ -13,7 +13,7 @@ function authHeaders(key: string): HeadersInit {
 }
 
 export default function OfficialNewsSection() {
-  const [posts, setPosts] = useState<OfficialNewsItem[]>([]);
+  const [posts, setPosts] = useState<MainNewsItem[]>([]);
   const [canWrite, setCanWrite] = useState(false);
   const [adminKey, setAdminKey] = useState("");
   const [showUnlock, setShowUnlock] = useState(false);
@@ -21,9 +21,10 @@ export default function OfficialNewsSection() {
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [editingPost, setEditingPost] = useState<MainNewsItem | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const postsRef = useRef<OfficialNewsItem[]>([]);
+  const postsRef = useRef<MainNewsItem[]>([]);
   const tapCountRef = useRef(0);
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const adminKeyRef = useRef("");
@@ -76,12 +77,13 @@ export default function OfficialNewsSection() {
     sessionStorage.removeItem(ADMIN_KEY_STORAGE);
     setAdminKey("");
     setCanWrite(false);
+    setEditingPost(null);
     setShowUnlock(false);
     setUnlockInput("");
     setUnlockError(null);
   }, []);
 
-  const loadPendingAnalysis = useCallback(async (items: OfficialNewsItem[]) => {
+  const loadPendingAnalysis = useCallback(async (items: MainNewsItem[]) => {
     const pendingIds = items
       .filter((item) => item.aiAnalysisPending && !item.aiAnalysis)
       .map((item) => item.id);
@@ -138,7 +140,7 @@ export default function OfficialNewsSection() {
           throw new Error(data.error || "메인 뉴스 로딩 실패");
         }
 
-        const items: OfficialNewsItem[] = data.posts ?? [];
+        const items: MainNewsItem[] = data.posts ?? [];
         setPosts(items);
         setLoadError(null);
         if (authKey) {
@@ -154,7 +156,11 @@ export default function OfficialNewsSection() {
           );
         } else {
           setPosts([]);
-          setLoadError("메인 뉴스를 불러오지 못했습니다.");
+          setLoadError(
+            err instanceof Error
+              ? err.message
+              : "메인 뉴스를 불러오지 못했습니다."
+          );
         }
       } finally {
         if (!silent) {
@@ -211,11 +217,19 @@ export default function OfficialNewsSection() {
     await loadPosts(unlockInput.trim());
   };
 
-  const handlePosted = (post: OfficialNewsItem) => {
+  const handlePosted = (post: MainNewsItem) => {
     setPosts((prev) => [post, ...prev]);
     if (post.aiAnalysisPending) {
       loadPendingAnalysis([post]);
     }
+    setActionMessage("메인 뉴스를 등록했습니다.");
+  };
+
+  const handleUpdated = (post: MainNewsItem) => {
+    setPosts((prev) =>
+      prev.map((item) => (item.id === post.id ? post : item))
+    );
+    setActionMessage("메인 뉴스를 수정했습니다.");
   };
 
   const handleDelete = async (id: number) => {
@@ -237,6 +251,9 @@ export default function OfficialNewsSection() {
       }
 
       setPosts((prev) => prev.filter((item) => item.id !== id));
+      if (editingPost?.id === id) {
+        setEditingPost(null);
+      }
       setActionMessage("메인 뉴스를 삭제했습니다.");
     } catch (err) {
       setActionMessage(
@@ -264,8 +281,8 @@ export default function OfficialNewsSection() {
         </h2>
         <p className="text-[11px] text-gray-500">
           {canWrite && adminKey
-            ? "관리자 모드 · 작성·삭제 가능"
-            : "AI 매크로 분석 추가"}
+            ? "관리자 모드 · 작성·수정·삭제 가능"
+            : "PostgreSQL 영구 저장 · AI 매크로 분석"}
         </p>
       </div>
 
@@ -296,7 +313,10 @@ export default function OfficialNewsSection() {
         <OfficialNewsForm
           adminKey={adminKey}
           onPosted={handlePosted}
+          onUpdated={handleUpdated}
           onLock={lock}
+          editingPost={editingPost}
+          onCancelEdit={() => setEditingPost(null)}
         />
       )}
 
@@ -316,7 +336,7 @@ export default function OfficialNewsSection() {
         <div className="h-32 animate-pulse rounded-xl border border-accent/20 bg-accent/5" />
       )}
 
-      {!isLoading && posts.length === 0 && (
+      {!isLoading && posts.length === 0 && !loadError && (
         <div className="rounded-xl border border-dashed border-surface-border px-4 py-8 text-center text-sm text-gray-500">
           등록된 메인 뉴스가 없습니다.
         </div>
@@ -327,7 +347,8 @@ export default function OfficialNewsSection() {
           <OfficialNewsCard
             key={item.id}
             item={item}
-            canDelete={canWrite && !!adminKey}
+            canManage={canWrite && !!adminKey}
+            onEdit={setEditingPost}
             onDelete={handleDelete}
             isDeleting={deletingId === item.id}
           />
