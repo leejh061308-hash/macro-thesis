@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { cacheSummary, getCachedSummary } from "@/lib/db";
 import { createTitleHash } from "@/lib/hash";
 import { isLikelyEnglish } from "@/lib/korean";
+import {
+  parseNewsSummary,
+  serializeNewsSummary,
+  type NewsSummaryParts,
+} from "@/lib/news-summary";
 import { getApiKey, getOpenAIClient } from "@/lib/openai";
 import {
   buildNewsSummaryAntiCopyPrompt,
@@ -11,12 +16,17 @@ import {
   NEWS_SUMMARY_PROMPT_VERSION,
   NEWS_SUMMARY_SYSTEM_PROMPT,
 } from "@/lib/prompts/news";
-import { isWeakHeadlineSummary } from "@/lib/summary-guard";
+import { isWeakNewsSummaryParts } from "@/lib/summary-guard";
 
 export const dynamic = "force-dynamic";
 
 const MAX_BATCH = 8;
 const CONCURRENCY = 3;
+
+const FALLBACK_SUMMARY: NewsSummaryParts = {
+  summary: "AI 요약을 생성하지 못했습니다.",
+  marketImpact: "",
+};
 
 interface SummarizeItem {
   id: string;
@@ -28,11 +38,26 @@ function newsTitleHash(title: string): string {
   return createTitleHash(`${NEWS_SUMMARY_PROMPT_VERSION}:${title}`);
 }
 
+function parseSummaryJson(raw: string): NewsSummaryParts | null {
+  try {
+    const parsed = JSON.parse(raw) as {
+      summary?: string;
+      marketImpact?: string;
+    };
+    const summary = parsed.summary?.trim() ?? "";
+    const marketImpact = parsed.marketImpact?.trim() ?? "";
+    if (!summary) return null;
+    return { summary, marketImpact };
+  } catch {
+    return null;
+  }
+}
+
 async function summarizeOne(
   title: string,
   source: string,
   options?: { retryKorean?: boolean; retryAntiCopy?: boolean }
-): Promise<string | null> {
+): Promise<NewsSummaryParts | null> {
   const apiKey = getApiKey();
   if (!apiKey || !apiKey.startsWith("sk-")) return null;
 
@@ -55,43 +80,63 @@ async function summarizeOne(
           { role: "system", content: systemContent },
           { role: "user", content: userContent },
         ],
+        response_format: { type: "json_object" },
         temperature: options?.retryAntiCopy ? 0.5 : 0.4,
-        max_tokens: 280,
+        max_tokens: 360,
       },
       { timeout: 12_000 }
     );
-    return completion.choices[0]?.message?.content?.trim() ?? null;
+
+    const raw = completion.choices[0]?.message?.content?.trim();
+    if (!raw) return null;
+    return parseSummaryJson(raw);
   } catch {
     return null;
   }
 }
 
+function isValidParts(parts: NewsSummaryParts): boolean {
+  if (isLikelyEnglish(parts.summary) || isLikelyEnglish(parts.marketImpact)) {
+    return false;
+  }
+  return !isWeakNewsSummaryParts(parts.summary, parts.marketImpact);
+}
+
 async function summarizeWithQualityChecks(
   title: string,
   source: string
-): Promise<string | null> {
-  let summary = await summarizeOne(title, source);
+): Promise<NewsSummaryParts | null> {
+  let parts = await summarizeOne(title, source);
 
-  if (summary && isLikelyEnglish(summary)) {
-    summary = await summarizeOne(title, source, { retryKorean: true });
+  if (parts && (isLikelyEnglish(parts.summary) || isLikelyEnglish(parts.marketImpact))) {
+    parts = await summarizeOne(title, source, { retryKorean: true });
   }
 
-  if (summary && isWeakHeadlineSummary(summary)) {
-    summary = await summarizeOne(title, source, { retryAntiCopy: true });
+  if (parts && !isValidParts(parts)) {
+    parts = await summarizeOne(title, source, { retryAntiCopy: true });
   }
 
-  if (summary && isLikelyEnglish(summary)) {
-    return null;
-  }
+  if (!parts || !isValidParts(parts)) return null;
+  return parts;
+}
 
-  return summary;
+function loadCachedParts(
+  articleId: string,
+  title: string
+): NewsSummaryParts | null {
+  const cached = getCachedSummary(articleId, newsTitleHash(title));
+  if (!cached) return null;
+
+  const parts = parseNewsSummary(cached);
+  if (!isValidParts(parts)) return null;
+  return parts;
 }
 
 async function runWithConcurrency(
   items: SummarizeItem[],
   limit: number
-): Promise<Record<string, string>> {
-  const results: Record<string, string> = {};
+): Promise<Record<string, NewsSummaryParts>> {
+  const results: Record<string, NewsSummaryParts> = {};
   const queue = [...items];
 
   async function worker() {
@@ -99,17 +144,22 @@ async function runWithConcurrency(
       const item = queue.shift();
       if (!item) break;
 
-      const titleHash = newsTitleHash(item.title);
-      const cached = getCachedSummary(item.id, titleHash);
-      if (cached && !isLikelyEnglish(cached) && !isWeakHeadlineSummary(cached)) {
+      const cached = loadCachedParts(item.id, item.title);
+      if (cached) {
         results[item.id] = cached;
         continue;
       }
 
-      const summary = await summarizeWithQualityChecks(item.title, item.source);
-      const text = summary ?? "AI 요약을 생성하지 못했습니다.";
-      cacheSummary(item.id, titleHash, text);
-      results[item.id] = text;
+      const parts =
+        (await summarizeWithQualityChecks(item.title, item.source)) ??
+        FALLBACK_SUMMARY;
+
+      cacheSummary(
+        item.id,
+        newsTitleHash(item.title),
+        serializeNewsSummary(parts)
+      );
+      results[item.id] = parts;
     }
   }
 

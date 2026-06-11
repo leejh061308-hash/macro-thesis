@@ -35,9 +35,11 @@ function mergeNewsItems(prev: NewsItem[], incoming: NewsItem[]): NewsItem[] {
     if (!existing) return item;
 
     const summary = item.summary || existing.summary;
+    const marketImpact = item.marketImpact || existing.marketImpact;
     return {
       ...item,
       summary,
+      marketImpact,
       summaryPending: !summary,
     };
   });
@@ -80,9 +82,12 @@ export default function NewsPage() {
                 })),
               }),
             });
-            if (!res.ok) return {} as Record<string, string>;
+            if (!res.ok) return {} as Record<string, { summary: string; marketImpact: string }>;
             const data = await res.json();
-            return (data.summaries ?? {}) as Record<string, string>;
+            return (data.summaries ?? {}) as Record<
+              string,
+              { summary: string; marketImpact: string }
+            >;
           })
         );
 
@@ -94,7 +99,8 @@ export default function NewsPage() {
             merged[item.id]
               ? {
                   ...item,
-                  summary: merged[item.id],
+                  summary: merged[item.id].summary,
+                  marketImpact: merged[item.id].marketImpact,
                   summaryPending: false,
                 }
               : item

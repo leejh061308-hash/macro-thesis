@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCachedSummary } from "@/lib/db";
 import { createTitleHash } from "@/lib/hash";
+import { parseNewsSummary } from "@/lib/news-summary";
 import { NEWS_SUMMARY_PROMPT_VERSION } from "@/lib/prompts/news";
 import { fetchMarketNews } from "@/lib/rss";
 import type { NewsItem } from "@/lib/types";
@@ -19,11 +20,15 @@ export async function GET(request: NextRequest) {
     const news: NewsItem[] = rawNews.map((item) => {
       const titleHash = newsTitleHash(item.title);
       const cached = getCachedSummary(item.id, titleHash);
+      const parsed = cached ? parseNewsSummary(cached) : null;
+      const hasSummary = !!parsed?.summary;
+
       return {
         id: item.id,
         title: item.title,
-        summary: cached ?? "",
-        summaryPending: !cached,
+        summary: parsed?.summary ?? "",
+        marketImpact: parsed?.marketImpact ?? "",
+        summaryPending: !hasSummary,
         publishedAt: item.publishedAt,
         url: item.url,
         source: item.source,

@@ -48,6 +48,7 @@ export interface NewsItem {
   id: string;
   title: string;
   summary: string;
+  marketImpact?: string;
   summaryPending?: boolean;
   publishedAt: string;
   url: string;

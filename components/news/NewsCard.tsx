@@ -6,6 +6,8 @@ interface NewsCardProps {
 }
 
 export default function NewsCard({ item }: NewsCardProps) {
+  const isPending = item.summaryPending && !item.summary;
+
   return (
     <article className="rounded-xl border border-surface-border bg-surface-card p-4 card-glow">
       <h3 className="mb-2 text-base font-semibold leading-snug text-white">
@@ -21,18 +23,23 @@ export default function NewsCard({ item }: NewsCardProps) {
         </time>
       </div>
 
-      <div className="mb-4">
-        <p className="mb-1 text-xs font-medium text-accent">AI 요약</p>
-        {item.summaryPending && !item.summary ? (
-          <p className="text-sm text-gray-400 animate-pulse">
-            요약 생성 중...
-          </p>
+      <div className="mb-3">
+        <p className="mb-1 text-xs font-medium text-accent">뉴스 요약</p>
+        {isPending ? (
+          <p className="text-sm text-gray-400 animate-pulse">요약 생성 중...</p>
         ) : (
-          <p className="text-sm leading-relaxed text-gray-200">
-            {item.summary}
-          </p>
+          <p className="text-sm leading-relaxed text-gray-200">{item.summary}</p>
         )}
       </div>
+
+      {!isPending && item.marketImpact && (
+        <div className="mb-4">
+          <p className="mb-1 text-xs font-medium text-bullish">시장 영향</p>
+          <p className="text-sm leading-relaxed text-gray-300">
+            {item.marketImpact}
+          </p>
+        </div>
+      )}
 
       <a
         href={item.url}

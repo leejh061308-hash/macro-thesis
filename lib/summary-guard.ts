@@ -58,13 +58,21 @@ export function isTooSimilarToSource(
   return overlapRatio(source, generated) >= threshold;
 }
 
-export function isWeakHeadlineSummary(summary: string): boolean {
-  const trimmed = summary.trim();
+function isWeakBrief(text: string, minKorean = 20): boolean {
+  const trimmed = text.trim();
   if (!trimmed) return true;
+  return (trimmed.match(/[가-힣]/g) ?? []).length < minKorean;
+}
 
-  const koreanChars = (trimmed.match(/[가-힣]/g) ?? []).length;
-  if (koreanChars < 40) return true;
+export function isWeakHeadlineSummary(summary: string): boolean {
+  return isWeakBrief(summary, 40);
+}
 
-  const sentences = trimmed.split(/[.!?…]\s+/).filter(Boolean);
-  return sentences.length < 2;
+export function isWeakNewsSummaryParts(
+  summary: string,
+  marketImpact: string
+): boolean {
+  if (isWeakBrief(summary, 20)) return true;
+  if (isWeakBrief(marketImpact, 15)) return true;
+  return false;
 }
