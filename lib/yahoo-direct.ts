@@ -10,8 +10,8 @@ const YAHOO_HOSTS = [
   "https://query2.finance.yahoo.com",
 ] as const;
 
-const FETCH_TIMEOUT = 20_000;
-const MAX_RETRIES = 3;
+const FETCH_TIMEOUT = 12_000;
+const MAX_RETRIES = 2;
 
 const PERIOD_PARAMS: Record<
   ChartPeriod,

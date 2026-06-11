@@ -7,7 +7,7 @@ const DB_PATH = path.join(DATA_DIR, "macrolens.db");
 
 const WATCHLIST_VERSION = 2;
 
-const DEFAULT_WATCHLIST = [
+export const DEFAULT_WATCHLIST = [
   { ticker: "^IXIC", name: "나스닥 종합" },
   { ticker: "^KS11", name: "코스피" },
   { ticker: "AAPL", name: "Apple" },
@@ -122,6 +122,23 @@ export function getWatchlist(): { ticker: string; name: string; sortOrder: numbe
     )
     .all() as { ticker: string; name: string; sortOrder: number }[];
   return rows;
+}
+
+export function getWatchlistSafe(): {
+  ticker: string;
+  name: string;
+  sortOrder: number;
+}[] {
+  try {
+    return getWatchlist();
+  } catch (error) {
+    console.error("Watchlist DB error:", error);
+    return DEFAULT_WATCHLIST.map((item, index) => ({
+      ticker: item.ticker,
+      name: item.name,
+      sortOrder: index,
+    }));
+  }
 }
 
 export function addToWatchlist(ticker: string, name: string): boolean {
