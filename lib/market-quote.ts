@@ -12,8 +12,9 @@ export interface YahooQuoteLike {
   regularMarketChange?: number;
   regularMarketChangePercent?: number;
   regularMarketPreviousClose?: number;
-  /** Yahoo v8 chart meta field */
+  /** Yahoo v8 chart / spark meta field */
   chartPreviousClose?: number;
+  previousClose?: number;
 }
 
 function pctChange(from: number, to: number): number {
@@ -26,7 +27,9 @@ export function resolveMarketQuote(
   quote: YahooQuoteLike
 ): ResolvedMarketQuote | null {
   const previousClose =
-    quote.regularMarketPreviousClose ?? quote.chartPreviousClose;
+    quote.regularMarketPreviousClose ??
+    quote.chartPreviousClose ??
+    quote.previousClose;
   const regularPrice = quote.regularMarketPrice;
 
   if (!previousClose || regularPrice == null) return null;
