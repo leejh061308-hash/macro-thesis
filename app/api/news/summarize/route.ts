@@ -10,13 +10,18 @@ import {
 import { getApiKey, getOpenAIClient } from "@/lib/openai";
 import {
   buildNewsSummaryAntiCopyPrompt,
+  buildNewsSummaryNaturalKoreanPrompt,
   buildNewsSummaryPrompt,
   buildNewsSummaryRetryPrompt,
   NEWS_SUMMARY_ANTI_COPY_RETRY_PROMPT,
+  NEWS_SUMMARY_NATURAL_KOREAN_RETRY_PROMPT,
   NEWS_SUMMARY_PROMPT_VERSION,
   NEWS_SUMMARY_SYSTEM_PROMPT,
 } from "@/lib/prompts/news";
-import { isWeakNewsSummaryParts } from "@/lib/summary-guard";
+import {
+  isWeakNewsSummaryParts,
+  looksLikeTranslationese,
+} from "@/lib/summary-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -56,20 +61,28 @@ function parseSummaryJson(raw: string): NewsSummaryParts | null {
 async function summarizeOne(
   title: string,
   source: string,
-  options?: { retryKorean?: boolean; retryAntiCopy?: boolean }
+  options?: {
+    retryKorean?: boolean;
+    retryAntiCopy?: boolean;
+    retryNaturalKorean?: boolean;
+  }
 ): Promise<NewsSummaryParts | null> {
   const apiKey = getApiKey();
   if (!apiKey || !apiKey.startsWith("sk-")) return null;
 
-  const userContent = options?.retryAntiCopy
-    ? buildNewsSummaryAntiCopyPrompt(title, source)
-    : options?.retryKorean
-      ? buildNewsSummaryRetryPrompt(title, source)
-      : buildNewsSummaryPrompt(title, source);
+  const userContent = options?.retryNaturalKorean
+    ? buildNewsSummaryNaturalKoreanPrompt(title, source)
+    : options?.retryAntiCopy
+      ? buildNewsSummaryAntiCopyPrompt(title, source)
+      : options?.retryKorean
+        ? buildNewsSummaryRetryPrompt(title, source)
+        : buildNewsSummaryPrompt(title, source);
 
-  const systemContent = options?.retryAntiCopy
-    ? `${NEWS_SUMMARY_SYSTEM_PROMPT}\n\n${NEWS_SUMMARY_ANTI_COPY_RETRY_PROMPT}`
-    : NEWS_SUMMARY_SYSTEM_PROMPT;
+  const systemContent = options?.retryNaturalKorean
+    ? `${NEWS_SUMMARY_SYSTEM_PROMPT}\n\n${NEWS_SUMMARY_NATURAL_KOREAN_RETRY_PROMPT}`
+    : options?.retryAntiCopy
+      ? `${NEWS_SUMMARY_SYSTEM_PROMPT}\n\n${NEWS_SUMMARY_ANTI_COPY_RETRY_PROMPT}`
+      : NEWS_SUMMARY_SYSTEM_PROMPT;
 
   try {
     const openai = getOpenAIClient();
@@ -81,7 +94,8 @@ async function summarizeOne(
           { role: "user", content: userContent },
         ],
         response_format: { type: "json_object" },
-        temperature: options?.retryAntiCopy ? 0.5 : 0.4,
+        temperature:
+          options?.retryNaturalKorean || options?.retryAntiCopy ? 0.55 : 0.4,
         max_tokens: 360,
       },
       { timeout: 12_000 }
@@ -112,8 +126,22 @@ async function summarizeWithQualityChecks(
     parts = await summarizeOne(title, source, { retryKorean: true });
   }
 
+  if (
+    parts &&
+    looksLikeTranslationese(parts.summary, parts.marketImpact)
+  ) {
+    parts = await summarizeOne(title, source, { retryNaturalKorean: true });
+  }
+
   if (parts && !isValidParts(parts)) {
     parts = await summarizeOne(title, source, { retryAntiCopy: true });
+  }
+
+  if (
+    parts &&
+    looksLikeTranslationese(parts.summary, parts.marketImpact)
+  ) {
+    parts = await summarizeOne(title, source, { retryNaturalKorean: true });
   }
 
   if (!parts || !isValidParts(parts)) return null;

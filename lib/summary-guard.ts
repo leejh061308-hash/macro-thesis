@@ -68,11 +68,34 @@ export function isWeakHeadlineSummary(summary: string): boolean {
   return isWeakBrief(summary, 40);
 }
 
+const TRANSLATIONESE_PATTERNS = [
+  /했으며.*(상황|중)이다/,
+  /언급했(으며|다)/,
+  /서로 발생/,
+  /의미가 거의 없/,
+  /간의 공격/,
+  /하고 있는 상황이다/,
+  /~였으며/,
+  /라고 언급/,
+  /것으로 알려/,
+];
+
+export function looksLikeTranslationese(...texts: string[]): boolean {
+  const combined = texts.join(" ");
+  const matchCount = TRANSLATIONESE_PATTERNS.filter((pattern) =>
+    pattern.test(combined)
+  ).length;
+  if (matchCount >= 2) return true;
+  if (/(했으며|였으며)/.test(combined) && /상황이다/.test(combined)) return true;
+  return matchCount >= 1 && /으며.*으며/.test(combined);
+}
+
 export function isWeakNewsSummaryParts(
   summary: string,
   marketImpact: string
 ): boolean {
   if (isWeakBrief(summary, 20)) return true;
   if (isWeakBrief(marketImpact, 15)) return true;
+  if (looksLikeTranslationese(summary, marketImpact)) return true;
   return false;
 }
