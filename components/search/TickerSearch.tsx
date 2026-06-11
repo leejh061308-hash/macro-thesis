@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getStockHeadline } from "@/lib/stock-display";
 import type { SearchResult } from "@/lib/types";
 
 interface TickerSearchProps {
@@ -94,7 +95,13 @@ export default function TickerSearch({
 
       {isOpen && results.length > 0 && (
         <ul className="absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded-lg border border-surface-border bg-surface-card shadow-xl">
-          {results.map((result) => (
+          {results.map((result) => {
+            const { primary, secondary } = getStockHeadline(
+              result.ticker,
+              result.name
+            );
+
+            return (
             <li
               key={result.ticker}
               className="flex items-center justify-between border-b border-surface-border/50 px-4 py-3 last:border-0 hover:bg-surface-raised transition-colors"
@@ -104,11 +111,9 @@ export default function TickerSearch({
                 onClick={() => handleSelect(result)}
                 className="flex-1 text-left"
               >
-                <span className="font-mono font-semibold text-accent">
-                  {result.ticker}
-                </span>
-                <p className="text-xs text-gray-400 truncate max-w-[200px]">
-                  {result.name}
+                <span className="font-semibold text-accent">{primary}</span>
+                <p className="text-xs text-gray-400 truncate max-w-[200px] font-mono">
+                  {secondary}
                   {result.exchange ? ` · ${result.exchange}` : ""}
                 </p>
               </button>
@@ -126,7 +131,8 @@ export default function TickerSearch({
                 </button>
               )}
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </div>

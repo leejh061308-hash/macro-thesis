@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { resolveStockDisplayName } from "@/lib/stock-display";
 import { isIndexTicker, normalizeTicker } from "@/lib/tickers";
+import { listWatchlistSafe } from "@/lib/watchlist-db";
 import { fetchStockDetail } from "@/lib/yahoo";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +21,10 @@ export async function GET(
       );
     }
 
-    const detail = await fetchStockDetail(ticker);
+    const [detail, watchlist] = await Promise.all([
+      fetchStockDetail(ticker),
+      listWatchlistSafe(),
+    ]);
 
     if (!detail) {
       return NextResponse.json(
@@ -27,6 +32,12 @@ export async function GET(
         { status: 404 }
       );
     }
+
+    const watchlistName = watchlist.find((item) => item.ticker === ticker)?.name;
+    detail.name = resolveStockDisplayName(
+      ticker,
+      watchlistName ?? detail.name
+    );
 
     return NextResponse.json(detail, {
       headers: { "Cache-Control": "no-store, no-cache, must-revalidate" },

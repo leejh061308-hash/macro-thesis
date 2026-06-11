@@ -5,6 +5,7 @@ import {
   formatPrice,
   formatRatio,
 } from "@/lib/format";
+import { getStockHeadline } from "@/lib/stock-display";
 import type { StockDetail } from "@/lib/types";
 
 interface StockMetricsProps {
@@ -42,16 +43,15 @@ const METRICS: {
 
 export default function StockMetrics({ detail }: StockMetricsProps) {
   const isPositive = detail.changePercent >= 0;
+  const { primary, secondary } = getStockHeadline(detail.ticker, detail.name);
 
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-surface-border bg-surface-card p-5 card-glow">
         <div className="flex items-baseline justify-between">
           <div>
-            <h2 className="font-mono text-2xl font-bold text-white">
-              {detail.ticker}
-            </h2>
-            <p className="text-sm text-neutral">{detail.name}</p>
+            <h2 className="text-2xl font-bold text-white">{primary}</h2>
+            <p className="text-sm text-neutral font-mono">{secondary}</p>
           </div>
           <div className="text-right">
             <p className="font-mono text-2xl font-bold text-white">

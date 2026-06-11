@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { formatChange, formatPrice } from "@/lib/format";
+import { getStockHeadline } from "@/lib/stock-display";
 import type { StockQuote } from "@/lib/types";
 
 interface StockCardProps {
@@ -14,6 +15,7 @@ export default function StockCard({
   isRemoving = false,
 }: StockCardProps) {
   const isPositive = stock.changePercent >= 0;
+  const { primary, secondary } = getStockHeadline(stock.ticker, stock.name);
 
   return (
     <div className="flex items-stretch overflow-hidden rounded-xl border border-surface-border bg-surface-card card-glow transition-colors hover:border-accent/30">
@@ -23,11 +25,9 @@ export default function StockCard({
       >
         <div className="flex items-start justify-between">
           <div>
-            <h3 className="font-mono text-lg font-bold text-white">
-              {stock.ticker}
-            </h3>
-            <p className="text-xs text-neutral truncate max-w-[180px]">
-              {stock.name}
+            <h3 className="text-lg font-bold text-white">{primary}</h3>
+            <p className="text-xs text-neutral truncate max-w-[180px] font-mono">
+              {secondary}
             </p>
           </div>
           <div className="text-right">
@@ -50,7 +50,7 @@ export default function StockCard({
           type="button"
           onClick={() => onRemove(stock.ticker)}
           disabled={isRemoving}
-          aria-label={`${stock.ticker} 관심종목에서 삭제`}
+          aria-label={`${primary} 관심종목에서 삭제`}
           className="flex w-12 shrink-0 items-center justify-center border-l border-surface-border text-gray-500 transition-colors hover:bg-bearish/10 hover:text-bearish disabled:opacity-50"
         >
           {isRemoving ? "…" : "×"}

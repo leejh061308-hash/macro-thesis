@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { setCachedQuotes } from "@/lib/quote-cache";
+import { resolveStockDisplayName } from "@/lib/stock-display";
 import { listWatchlistSafe } from "@/lib/watchlist-db";
 import { fetchQuote, fetchQuotes } from "@/lib/yahoo";
 
@@ -43,7 +44,10 @@ export async function GET() {
     const quote = quoteMap.get(item.ticker);
     return {
       ticker: item.ticker,
-      name: quote?.name ?? item.name,
+      name: resolveStockDisplayName(
+        item.ticker,
+        item.name || quote?.name || item.ticker
+      ),
       price: quote?.price ?? 0,
       change: quote?.change ?? 0,
       changePercent: quote?.changePercent ?? 0,

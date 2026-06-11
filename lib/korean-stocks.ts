@@ -154,6 +154,14 @@ const KOREAN_STOCKS: KoreanStockAlias[] = [
   },
 ];
 
+const KOREAN_STOCK_NAME_BY_TICKER = Object.fromEntries(
+  KOREAN_STOCKS.map((entry) => [entry.ticker, entry.name])
+);
+
+export function getKoreanStockCanonicalName(ticker: string): string | null {
+  return KOREAN_STOCK_NAME_BY_TICKER[ticker] ?? null;
+}
+
 function normalizeAliasQuery(query: string): string {
   return query.trim().toLowerCase();
 }
