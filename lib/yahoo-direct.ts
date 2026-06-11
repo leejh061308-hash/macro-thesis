@@ -13,7 +13,7 @@ const YAHOO_HOSTS = [
 
 const FETCH_TIMEOUT = 12_000;
 const SPARK_TIMEOUT = 12_000;
-const SPARK_CHUNK_SIZE = 4;
+const SPARK_CHUNK_SIZE = 8;
 const CHART_CONCURRENCY = 2;
 const FETCH_RETRIES = 2;
 

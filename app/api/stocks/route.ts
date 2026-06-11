@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+import { setCachedQuotes } from "@/lib/quote-cache";
 import { listWatchlistSafe } from "@/lib/watchlist-db";
-import { fetchQuotes } from "@/lib/yahoo";
+import { fetchQuote, fetchQuotes } from "@/lib/yahoo";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,23 @@ export async function GET() {
   }
 
   const quoteMap = new Map(quotes.map((q) => [q.ticker, q]));
+  let missingTickers = tickers.filter(
+    (ticker) => !quoteMap.get(ticker)?.price
+  );
+
+  if (missingTickers.length > 0) {
+    const retryQuotes = (
+      await Promise.all(missingTickers.map((ticker) => fetchQuote(ticker)))
+    ).filter((quote): quote is NonNullable<typeof quote> => !!quote?.price);
+
+    if (retryQuotes.length > 0) {
+      setCachedQuotes(retryQuotes);
+      for (const quote of retryQuotes) {
+        quoteMap.set(quote.ticker, quote);
+      }
+    }
+    missingTickers = tickers.filter((ticker) => !quoteMap.get(ticker)?.price);
+  }
 
   const stocks = watchlist.map((item) => {
     const quote = quoteMap.get(item.ticker);
@@ -40,9 +58,7 @@ export async function GET() {
       ? "failed"
       : pricedCount < tickers.length
         ? "partial"
-        : quotes.length < tickers.length
-          ? "stale"
-          : "ok";
+        : "ok";
 
   return NextResponse.json(
     { stocks, quoteStatus },

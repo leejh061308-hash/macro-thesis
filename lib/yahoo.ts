@@ -56,7 +56,8 @@ const QUOTE_FIELDS = [
 ] as const;
 
 const QUOTE_TIMEOUT = 8_000;
-const QUOTES_BUDGET_MS = 20_000;
+const QUOTES_BUDGET_MS = 35_000;
+const QUOTE_FETCH_CONCURRENCY = 4;
 const DETAIL_TIMEOUT = 15_000;
 const CHART_TIMEOUT = 12_000;
 const SEARCH_TIMEOUT = 8_000;
@@ -119,19 +120,37 @@ function formatChartLabel(date: Date, period: ChartPeriod): string {
   });
 }
 
+async function mapQuotesWithConcurrency(
+  tickers: string[],
+  deadline: number,
+  fetcher: (ticker: string) => Promise<StockQuote | null>
+): Promise<StockQuote[]> {
+  const quotes: StockQuote[] = [];
+  let index = 0;
+
+  async function worker() {
+    while (index < tickers.length && Date.now() < deadline) {
+      const current = index++;
+      const quote = await fetcher(tickers[current]);
+      if (quote) quotes.push(quote);
+    }
+  }
+
+  await Promise.all(
+    Array.from(
+      { length: Math.min(QUOTE_FETCH_CONCURRENCY, tickers.length) },
+      worker
+    )
+  );
+
+  return quotes;
+}
+
 async function fetchQuotesFromLibrary(
   tickers: string[],
   deadline: number
 ): Promise<StockQuote[]> {
-  const quotes: StockQuote[] = [];
-
-  for (const ticker of tickers) {
-    if (Date.now() >= deadline) break;
-    const quote = await fetchQuoteFromLibrary(ticker);
-    if (quote) quotes.push(quote);
-  }
-
-  return quotes;
+  return mapQuotesWithConcurrency(tickers, deadline, fetchQuoteFromLibrary);
 }
 
 async function fetchQuoteFromLibrary(
@@ -196,16 +215,23 @@ export async function fetchQuotes(
     const finnhubTickers = isFinnhubConfigured()
       ? staleTickers.filter((ticker) => !isKoreanMarketTicker(ticker))
       : [];
-    const yahooTickers = staleTickers.filter(
-      (ticker) => !finnhubTickers.includes(ticker)
+    const koreanTickers = staleTickers.filter((ticker) =>
+      isKoreanMarketTicker(ticker)
     );
 
-    if (finnhubTickers.length > 0) {
-      fresh = await fetchFinnhubQuotes(finnhubTickers, names);
-    }
+    const [finnhubQuotes, koreanQuotes] = await Promise.all([
+      finnhubTickers.length > 0
+        ? fetchFinnhubQuotes(finnhubTickers, names)
+        : Promise.resolve([]),
+      koreanTickers.length > 0
+        ? fetchDirectQuotes(koreanTickers)
+        : Promise.resolve([]),
+    ]);
+
+    fresh = [...finnhubQuotes, ...koreanQuotes];
 
     const freshMap = new Map(fresh.map((quote) => [quote.ticker, quote]));
-    let stillMissing = yahooTickers.filter((ticker) => !freshMap.has(ticker));
+    let stillMissing = staleTickers.filter((ticker) => !freshMap.has(ticker));
 
     if (stillMissing.length > 0 && Date.now() < deadline) {
       const yahooQuotes = await fetchDirectQuotes(stillMissing);
