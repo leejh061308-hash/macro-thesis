@@ -32,6 +32,14 @@ function finnhubSymbol(ticker: string): string | null {
   return ticker;
 }
 
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
 export function isFinnhubConfigured(): boolean {
   return !!getFinnhubToken();
 }
@@ -109,6 +117,31 @@ export async function fetchFinnhubStockDetail(
   };
 }
 
+async function fetchFinnhubQuote(
+  ticker: string,
+  names: Record<string, string>
+): Promise<StockQuote | null> {
+  const symbol = finnhubSymbol(ticker);
+  if (!symbol) return null;
+
+  const data = await finnhubGet<{ c?: number; d?: number; dp?: number }>(
+    `/quote?symbol=${encodeURIComponent(symbol)}`,
+    "quote"
+  );
+
+  if (!data?.c || data.c <= 0) return null;
+
+  return {
+    ticker,
+    name: names[ticker] ?? ticker,
+    price: data.c,
+    change: data.d ?? 0,
+    changePercent: data.dp ?? 0,
+    currency: "USD",
+    session: "regular",
+  };
+}
+
 export async function fetchFinnhubQuotes(
   tickers: string[],
   names: Record<string, string> = {}
@@ -117,26 +150,13 @@ export async function fetchFinnhubQuotes(
 
   const quotes: StockQuote[] = [];
 
-  for (const ticker of tickers) {
-    const symbol = finnhubSymbol(ticker);
-    if (!symbol) continue;
-
-    const data = await finnhubGet<{ c?: number; d?: number; dp?: number }>(
-      `/quote?symbol=${encodeURIComponent(symbol)}`,
-      "quote"
+  for (const batch of chunk(tickers, 4)) {
+    const batchQuotes = await Promise.all(
+      batch.map((ticker) => fetchFinnhubQuote(ticker, names))
     );
-
-    if (!data?.c || data.c <= 0) continue;
-
-    quotes.push({
-      ticker,
-      name: names[ticker] ?? ticker,
-      price: data.c,
-      change: data.d ?? 0,
-      changePercent: data.dp ?? 0,
-      currency: "USD",
-      session: "regular",
-    });
+    quotes.push(
+      ...batchQuotes.filter((quote): quote is StockQuote => quote !== null)
+    );
   }
 
   return quotes;

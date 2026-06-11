@@ -9,7 +9,7 @@ import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { NEWS_REFRESH_INTERVAL } from "@/lib/constants";
 import type { NewsItem } from "@/lib/types";
 
-const FETCH_TIMEOUT = 15_000;
+const FETCH_TIMEOUT = 30_000;
 const SUMMARIZE_BATCH = 8;
 const SUMMARIZE_PARALLEL = 2;
 
@@ -229,6 +229,13 @@ export default function NewsPage() {
       {error && !isLoading && (
         <div className="rounded-lg border border-bearish/30 bg-bearish/10 px-4 py-3 text-sm text-bearish">
           {error}
+          <button
+            type="button"
+            onClick={() => loadNews({ fresh: true })}
+            className="mt-2 block text-xs underline hover:text-white"
+          >
+            지금 다시 시도
+          </button>
         </div>
       )}
 

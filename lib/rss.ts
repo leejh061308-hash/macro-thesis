@@ -64,7 +64,7 @@ const USER_AGENT =
   "Mozilla/5.0 (compatible; MacroLens/1.0; Investment Research)";
 
 const MAX_NEWS_ITEMS = 32;
-const RSS_CACHE_MS = 30_000;
+const RSS_CACHE_MS = 120_000;
 
 let newsCache: { data: RawNewsItem[]; fetchedAt: number } | null = null;
 

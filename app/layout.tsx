@@ -8,6 +8,11 @@ export const metadata: Metadata = {
   description: "개인 투자자를 위한 AI 투자 리서치 플랫폼",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{

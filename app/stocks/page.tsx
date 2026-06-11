@@ -8,8 +8,8 @@ import { STOCK_REFRESH_INTERVAL } from "@/lib/constants";
 import { WATCHLIST_UPDATED_EVENT } from "@/lib/watchlist-events";
 import type { StockQuote } from "@/lib/types";
 
-const LOAD_TIMEOUT_MS = 45_000;
-const LOAD_MAX_ATTEMPTS = 3;
+const LOAD_TIMEOUT_MS = 25_000;
+const LOAD_MAX_ATTEMPTS = 2;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));

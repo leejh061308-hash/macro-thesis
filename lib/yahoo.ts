@@ -155,6 +155,13 @@ async function fetchQuoteFromLibrary(
 }
 
 export async function fetchQuote(ticker: string): Promise<StockQuote | null> {
+  if (isFinnhubConfigured()) {
+    const finnhubQuotes = await fetchFinnhubQuotes([ticker], {
+      [ticker]: ticker,
+    });
+    if (finnhubQuotes[0]) return finnhubQuotes[0];
+  }
+
   const direct = await fetchDirectQuote(ticker);
   if (direct) return direct;
   return fetchQuoteFromLibrary(ticker);
@@ -173,16 +180,20 @@ export async function fetchQuotes(
 
   let fresh: StockQuote[] = [];
   if (staleTickers.length > 0 && Date.now() < deadline) {
-    fresh = await fetchDirectQuotes(staleTickers);
+    if (isFinnhubConfigured()) {
+      fresh = await fetchFinnhubQuotes(staleTickers, names);
+    } else {
+      fresh = await fetchDirectQuotes(staleTickers);
+    }
 
     const freshMap = new Map(fresh.map((quote) => [quote.ticker, quote]));
     let stillMissing = staleTickers.filter((ticker) => !freshMap.has(ticker));
 
-    if (stillMissing.length > 0 && isFinnhubConfigured() && Date.now() < deadline) {
-      const finnhubQuotes = await fetchFinnhubQuotes(stillMissing, names);
-      fresh = [...fresh, ...finnhubQuotes];
-      const finnhubMap = new Map(finnhubQuotes.map((quote) => [quote.ticker, quote]));
-      stillMissing = stillMissing.filter((ticker) => !finnhubMap.has(ticker));
+    if (stillMissing.length > 0 && Date.now() < deadline) {
+      const yahooQuotes = await fetchDirectQuotes(stillMissing);
+      fresh = [...fresh, ...yahooQuotes];
+      const yahooMap = new Map(yahooQuotes.map((quote) => [quote.ticker, quote]));
+      stillMissing = stillMissing.filter((ticker) => !yahooMap.has(ticker));
     }
 
     if (stillMissing.length > 0 && Date.now() < deadline) {
@@ -345,8 +356,10 @@ export async function fetchStockDetail(
     console.error(`[yahoo] stock detail failed for ${ticker}:`, error);
   }
 
-  const finnhubDetail = await fetchFinnhubStockDetail(ticker);
-  if (finnhubDetail) return finnhubDetail;
+  if (isFinnhubConfigured()) {
+    const finnhubDetail = await fetchFinnhubStockDetail(ticker);
+    if (finnhubDetail) return finnhubDetail;
+  }
 
   const quote = await fetchQuote(ticker);
   if (quote && quote.price > 0) {
