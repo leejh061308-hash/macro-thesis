@@ -1,6 +1,6 @@
 import type { StockQuote } from "./types";
 
-const TTL_MS = 60_000;
+const TTL_MS = 300_000;
 
 const store = new Map<string, { quote: StockQuote; expiresAt: number }>();
 

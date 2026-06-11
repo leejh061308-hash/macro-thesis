@@ -8,9 +8,13 @@ export async function GET() {
   const watchlist = await listWatchlistSafe();
   const tickers = watchlist.map((w) => w.ticker);
 
+  const names = Object.fromEntries(
+    watchlist.map((item) => [item.ticker, item.name])
+  );
+
   let quotes: Awaited<ReturnType<typeof fetchQuotes>> = [];
   try {
-    quotes = await fetchQuotes(tickers);
+    quotes = await fetchQuotes(tickers, names);
   } catch (error) {
     console.error("Quotes fetch error:", error);
   }

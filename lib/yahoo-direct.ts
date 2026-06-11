@@ -1,5 +1,6 @@
 import { resolveMarketQuote, type YahooQuoteLike } from "@/lib/market-quote";
 import { withTimeout } from "@/lib/timeout";
+import { fetchYahoo } from "@/lib/yahoo-fetch";
 import type { ChartDataPoint, ChartPeriod, StockQuote } from "./types";
 
 const YAHOO_USER_AGENT =
@@ -163,7 +164,7 @@ async function fetchYahooJson<T>(
     for (const url of urls) {
       try {
         const response = await withTimeout(
-          fetch(url, {
+          fetchYahoo(url, {
             headers: {
               "User-Agent": YAHOO_USER_AGENT,
               Accept: "application/json",
@@ -173,6 +174,10 @@ async function fetchYahooJson<T>(
           timeoutMs,
           label
         );
+
+        if (response.status === 429) {
+          throw new Error(`${label} HTTP 429`);
+        }
 
         if (!response.ok) {
           throw new Error(`${label} HTTP ${response.status}`);
@@ -301,7 +306,7 @@ export async function fetchDirectQuotes(
   }
 
   const missing = tickers.filter((ticker) => !quoteMap.has(ticker));
-  if (missing.length > 0) {
+  if (missing.length > 0 && quoteMap.size > 0) {
     const chartQuotes = await mapWithConcurrency(
       missing,
       CHART_CONCURRENCY,

@@ -7,6 +7,7 @@ import {
   getStaleCachedQuotes,
   setCachedQuotes,
 } from "@/lib/quote-cache";
+import { fetchFinnhubQuotes, isFinnhubConfigured } from "@/lib/finnhub";
 import {
   fetchDirectChartData,
   fetchDirectQuote,
@@ -42,7 +43,8 @@ const QUOTE_FIELDS = [
   "regularMarketPreviousClose",
 ] as const;
 
-const QUOTE_TIMEOUT = 15_000;
+const QUOTE_TIMEOUT = 8_000;
+const QUOTES_BUDGET_MS = 20_000;
 const DETAIL_TIMEOUT = 15_000;
 const CHART_TIMEOUT = 12_000;
 const SEARCH_TIMEOUT = 8_000;
@@ -106,11 +108,13 @@ function formatChartLabel(date: Date, period: ChartPeriod): string {
 }
 
 async function fetchQuotesFromLibrary(
-  tickers: string[]
+  tickers: string[],
+  deadline: number
 ): Promise<StockQuote[]> {
   const quotes: StockQuote[] = [];
 
   for (const ticker of tickers) {
+    if (Date.now() >= deadline) break;
     const quote = await fetchQuoteFromLibrary(ticker);
     if (quote) quotes.push(quote);
   }
@@ -151,22 +155,33 @@ export async function fetchQuote(ticker: string): Promise<StockQuote | null> {
   return fetchQuoteFromLibrary(ticker);
 }
 
-export async function fetchQuotes(tickers: string[]): Promise<StockQuote[]> {
+export async function fetchQuotes(
+  tickers: string[],
+  names: Record<string, string> = {}
+): Promise<StockQuote[]> {
   if (tickers.length === 0) return [];
 
   const cached = getCachedQuotes(tickers);
   const cachedMap = new Map(cached.map((quote) => [quote.ticker, quote]));
   const staleTickers = tickers.filter((ticker) => !cachedMap.has(ticker));
+  const deadline = Date.now() + QUOTES_BUDGET_MS;
 
   let fresh: StockQuote[] = [];
-  if (staleTickers.length > 0) {
+  if (staleTickers.length > 0 && Date.now() < deadline) {
     fresh = await fetchDirectQuotes(staleTickers);
 
     const freshMap = new Map(fresh.map((quote) => [quote.ticker, quote]));
-    const stillMissing = staleTickers.filter((ticker) => !freshMap.has(ticker));
+    let stillMissing = staleTickers.filter((ticker) => !freshMap.has(ticker));
 
-    if (stillMissing.length > 0) {
-      const libraryQuotes = await fetchQuotesFromLibrary(stillMissing);
+    if (stillMissing.length > 0 && isFinnhubConfigured() && Date.now() < deadline) {
+      const finnhubQuotes = await fetchFinnhubQuotes(stillMissing, names);
+      fresh = [...fresh, ...finnhubQuotes];
+      const finnhubMap = new Map(finnhubQuotes.map((quote) => [quote.ticker, quote]));
+      stillMissing = stillMissing.filter((ticker) => !finnhubMap.has(ticker));
+    }
+
+    if (stillMissing.length > 0 && Date.now() < deadline) {
+      const libraryQuotes = await fetchQuotesFromLibrary(stillMissing, deadline);
       fresh = [...fresh, ...libraryQuotes];
     }
 
