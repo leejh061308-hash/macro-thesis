@@ -1,13 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
-import { addToWatchlist, getWatchlist, removeFromWatchlist } from "@/lib/db";
+import { isPostgresConfigured } from "@/lib/postgres";
 import { normalizeTicker } from "@/lib/tickers";
+import {
+  addToWatchlist,
+  listWatchlist,
+  removeFromWatchlist,
+} from "@/lib/watchlist-db";
 import { fetchQuote } from "@/lib/yahoo";
 
 export const dynamic = "force-dynamic";
 
+function requireDatabase() {
+  if (!isPostgresConfigured()) {
+    return NextResponse.json(
+      {
+        error:
+          "PostgreSQL이 설정되지 않았습니다. Railway에서 Postgres를 추가하고 DATABASE_URL을 설정해주세요.",
+      },
+      { status: 503 }
+    );
+  }
+  return null;
+}
+
 export async function GET() {
   try {
-    const watchlist = getWatchlist();
+    const dbError = requireDatabase();
+    if (dbError) return dbError;
+
+    const watchlist = await listWatchlist();
     return NextResponse.json({ watchlist });
   } catch (error) {
     console.error("Watchlist GET error:", error);
@@ -20,6 +41,9 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const dbError = requireDatabase();
+    if (dbError) return dbError;
+
     const body = await request.json();
     const ticker = normalizeTicker(body.ticker?.trim() ?? "");
 
@@ -38,7 +62,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const added = addToWatchlist(ticker, quote.name);
+    const added = await addToWatchlist(ticker, quote.name);
     if (!added) {
       return NextResponse.json(
         { error: "이미 관심종목에 등록된 티커입니다." },
@@ -58,6 +82,9 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const dbError = requireDatabase();
+    if (dbError) return dbError;
+
     const paramTicker = request.nextUrl.searchParams.get("ticker");
     const body = await request.json().catch(() => ({}));
     const raw =
@@ -73,7 +100,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const removed = removeFromWatchlist(ticker);
+    const removed = await removeFromWatchlist(ticker);
     if (!removed) {
       return NextResponse.json(
         { error: "관심종목에 없는 티커입니다." },

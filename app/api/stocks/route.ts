@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { getWatchlistSafe } from "@/lib/db";
+import { listWatchlistSafe } from "@/lib/watchlist-db";
 import { fetchQuotes } from "@/lib/yahoo";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const watchlist = getWatchlistSafe();
+  const watchlist = await listWatchlistSafe();
   const tickers = watchlist.map((w) => w.ticker);
 
   let quotes: Awaited<ReturnType<typeof fetchQuotes>> = [];
