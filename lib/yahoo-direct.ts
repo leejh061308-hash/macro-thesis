@@ -10,8 +10,44 @@ const YAHOO_HOSTS = [
   "https://query2.finance.yahoo.com",
 ] as const;
 
-const FETCH_TIMEOUT = 7_000;
-const SPARK_TIMEOUT = 5_000;
+const FETCH_TIMEOUT = 12_000;
+const SPARK_TIMEOUT = 12_000;
+const SPARK_CHUNK_SIZE = 4;
+const CHART_CONCURRENCY = 2;
+const FETCH_RETRIES = 2;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let index = 0;
+
+  async function worker() {
+    while (index < items.length) {
+      const current = index++;
+      results[current] = await fn(items[current]);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, worker)
+  );
+  return results;
+}
 
 const PERIOD_PARAMS: Record<
   ChartPeriod,
@@ -123,27 +159,33 @@ async function fetchYahooJson<T>(
 ): Promise<T> {
   let lastError: unknown;
 
-  for (const url of urls) {
-    try {
-      const response = await withTimeout(
-        fetch(url, {
-          headers: {
-            "User-Agent": YAHOO_USER_AGENT,
-            Accept: "application/json",
-          },
-          cache: "no-store",
-        }),
-        timeoutMs,
-        label
-      );
+  for (let attempt = 0; attempt <= FETCH_RETRIES; attempt++) {
+    for (const url of urls) {
+      try {
+        const response = await withTimeout(
+          fetch(url, {
+            headers: {
+              "User-Agent": YAHOO_USER_AGENT,
+              Accept: "application/json",
+            },
+            cache: "no-store",
+          }),
+          timeoutMs,
+          label
+        );
 
-      if (!response.ok) {
-        throw new Error(`${label} HTTP ${response.status}`);
+        if (!response.ok) {
+          throw new Error(`${label} HTTP ${response.status}`);
+        }
+
+        return (await response.json()) as T;
+      } catch (error) {
+        lastError = error;
       }
+    }
 
-      return (await response.json()) as T;
-    } catch (error) {
-      lastError = error;
+    if (attempt < FETCH_RETRIES) {
+      await sleep(600 * (attempt + 1));
     }
   }
 
@@ -247,19 +289,23 @@ export async function fetchDirectQuotes(
 
   const quoteMap = new Map<string, StockQuote>();
 
-  try {
-    const sparkQuotes = await fetchSparkQuotes(tickers);
-    for (const quote of sparkQuotes) {
-      quoteMap.set(quote.ticker, quote);
+  for (const batch of chunk(tickers, SPARK_CHUNK_SIZE)) {
+    try {
+      const sparkQuotes = await fetchSparkQuotes(batch);
+      for (const quote of sparkQuotes) {
+        quoteMap.set(quote.ticker, quote);
+      }
+    } catch (error) {
+      console.error("[yahoo-direct] batch spark quote failed:", error);
     }
-  } catch (error) {
-    console.error("[yahoo-direct] batch spark quote failed:", error);
   }
 
   const missing = tickers.filter((ticker) => !quoteMap.has(ticker));
   if (missing.length > 0) {
-    const chartQuotes = await Promise.all(
-      missing.map((ticker) => fetchChartQuote(ticker))
+    const chartQuotes = await mapWithConcurrency(
+      missing,
+      CHART_CONCURRENCY,
+      fetchChartQuote
     );
     for (const quote of chartQuotes) {
       if (quote) quoteMap.set(quote.ticker, quote);

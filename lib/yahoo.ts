@@ -42,7 +42,7 @@ const QUOTE_FIELDS = [
   "regularMarketPreviousClose",
 ] as const;
 
-const QUOTE_TIMEOUT = 10_000;
+const QUOTE_TIMEOUT = 15_000;
 const DETAIL_TIMEOUT = 15_000;
 const CHART_TIMEOUT = 12_000;
 const SEARCH_TIMEOUT = 8_000;
@@ -105,6 +105,19 @@ function formatChartLabel(date: Date, period: ChartPeriod): string {
   });
 }
 
+async function fetchQuotesFromLibrary(
+  tickers: string[]
+): Promise<StockQuote[]> {
+  const quotes: StockQuote[] = [];
+
+  for (const ticker of tickers) {
+    const quote = await fetchQuoteFromLibrary(ticker);
+    if (quote) quotes.push(quote);
+  }
+
+  return quotes;
+}
+
 async function fetchQuoteFromLibrary(
   ticker: string
 ): Promise<StockQuote | null> {
@@ -148,6 +161,15 @@ export async function fetchQuotes(tickers: string[]): Promise<StockQuote[]> {
   let fresh: StockQuote[] = [];
   if (staleTickers.length > 0) {
     fresh = await fetchDirectQuotes(staleTickers);
+
+    const freshMap = new Map(fresh.map((quote) => [quote.ticker, quote]));
+    const stillMissing = staleTickers.filter((ticker) => !freshMap.has(ticker));
+
+    if (stillMissing.length > 0) {
+      const libraryQuotes = await fetchQuotesFromLibrary(stillMissing);
+      fresh = [...fresh, ...libraryQuotes];
+    }
+
     if (fresh.length > 0) {
       setCachedQuotes(fresh);
     }
