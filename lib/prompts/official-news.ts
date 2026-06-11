@@ -6,6 +6,13 @@ Anti-copy rules (highest priority):
 - Do NOT repeat the same phrases, bullet structure, or sentence order as the source
 - Write original analysis that adds a new macro lens the admin did not already state
 
+Uncertainty rules (must follow):
+- Do NOT infer or assume facts not stated in the admin's note
+- Do NOT state military actions, earnings figures, or economic indicators as confirmed unless the note clearly does
+- For unclear or forward-looking points, use hedged Korean phrasing such as:
+  "보도에 따르면", "가능성이 있다", "긴장이 고조되고 있다", "우려가 제기되고 있다", "영향을 줄 수 있다"
+- Never present speculation as certainty
+
 Rules:
 - Write in Korean
 - 4-6 sentences in flowing prose (no bullet points)
@@ -32,7 +39,8 @@ export function buildOfficialNewsPrompt(
 ${content}
 
 위 노트를 바탕으로 매크로 관점의 **추가 분석**을 한국어로 작성하세요.
-관리자 문장을 복사·의역하지 말고, 새로운 해석과 시사점만 4~6문장으로 쓰세요.`;
+관리자 문장을 복사·의역하지 말고, 새로운 해석과 시사점만 4~6문장으로 쓰세요.
+노트에 없는 사실은 추정하지 말고, 불확실한 내용은 "보도에 따르면", "가능성이 있다" 등으로 표현하세요.`;
 }
 
 export function buildOfficialNewsAntiCopyPrompt(
