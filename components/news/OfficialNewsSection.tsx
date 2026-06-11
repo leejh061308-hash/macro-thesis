@@ -24,6 +24,11 @@ export default function OfficialNewsSection() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const tapCountRef = useRef(0);
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const adminKeyRef = useRef("");
+
+  useEffect(() => {
+    adminKeyRef.current = adminKey;
+  }, [adminKey]);
 
   const verifyKey = useCallback(async (key: string): Promise<boolean> => {
     try {
@@ -111,7 +116,8 @@ export default function OfficialNewsSection() {
     async (key?: string) => {
       setIsLoading(true);
       try {
-        const headers: HeadersInit = key ? authHeaders(key) : {};
+        const authKey = key ?? adminKeyRef.current;
+        const headers: HeadersInit = authKey ? authHeaders(authKey) : {};
         const res = await fetch("/api/official-news", {
           cache: "no-store",
           headers,
@@ -124,7 +130,9 @@ export default function OfficialNewsSection() {
 
         const items: OfficialNewsItem[] = data.posts ?? [];
         setPosts(items);
-        setCanWrite(!!data.canWrite);
+        if (authKey) {
+          setCanWrite(!!data.canWrite);
+        }
         loadPendingAnalysis(items);
       } catch {
         setPosts([]);
@@ -176,7 +184,9 @@ export default function OfficialNewsSection() {
     const ok = await unlock(unlockInput);
     if (!ok) {
       setUnlockError("인증에 실패했습니다.");
+      return;
     }
+    await loadPosts(unlockInput.trim());
   };
 
   const handlePosted = (post: OfficialNewsItem) => {
@@ -230,7 +240,11 @@ export default function OfficialNewsSection() {
         >
           메인 뉴스
         </h2>
-        <p className="text-[11px] text-gray-500">AI 매크로 분석 추가</p>
+        <p className="text-[11px] text-gray-500">
+          {canWrite && adminKey
+            ? "관리자 모드 · 작성·삭제 가능"
+            : "AI 매크로 분석 추가"}
+        </p>
       </div>
 
       {showUnlock && !canWrite && (
@@ -285,7 +299,7 @@ export default function OfficialNewsSection() {
           <OfficialNewsCard
             key={item.id}
             item={item}
-            canDelete={canWrite}
+            canDelete={canWrite && !!adminKey}
             onDelete={handleDelete}
             isDeleting={deletingId === item.id}
           />

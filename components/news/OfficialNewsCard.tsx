@@ -27,22 +27,9 @@ export default function OfficialNewsCard({
             </span>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <time className="text-xs text-gray-400 font-mono">
-            {formatDate(item.publishedAt)}
-          </time>
-          {canDelete && onDelete && (
-            <button
-              type="button"
-              onClick={() => onDelete(item.id)}
-              disabled={isDeleting}
-              aria-label={`${item.title} 삭제`}
-              className="rounded-md border border-surface-border px-2 py-0.5 text-[10px] text-gray-400 transition-colors hover:border-bearish/40 hover:bg-bearish/10 hover:text-bearish disabled:opacity-50"
-            >
-              {isDeleting ? "삭제 중…" : "삭제"}
-            </button>
-          )}
-        </div>
+        <time className="shrink-0 text-xs text-gray-400 font-mono">
+          {formatDate(item.publishedAt)}
+        </time>
       </div>
 
       <h3 className="mb-3 text-base font-semibold leading-snug text-white">
@@ -65,6 +52,18 @@ export default function OfficialNewsCard({
           </p>
         )}
       </div>
+
+      {canDelete && onDelete && (
+        <button
+          type="button"
+          onClick={() => onDelete(item.id)}
+          disabled={isDeleting}
+          aria-label={`${item.title} 삭제`}
+          className="mt-4 w-full rounded-lg border border-bearish/30 py-2 text-sm text-bearish transition-colors hover:bg-bearish/10 disabled:opacity-50"
+        >
+          {isDeleting ? "삭제 중…" : "메인 뉴스 삭제"}
+        </button>
+      )}
     </article>
   );
 }
