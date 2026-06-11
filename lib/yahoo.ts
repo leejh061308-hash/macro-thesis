@@ -3,6 +3,11 @@ import { resolveMarketQuote, type YahooQuoteLike } from "@/lib/market-quote";
 import { isIndexTicker } from "@/lib/tickers";
 import { withTimeout } from "@/lib/timeout";
 import {
+  getCachedQuotes,
+  getStaleCachedQuotes,
+  setCachedQuotes,
+} from "@/lib/quote-cache";
+import {
   fetchDirectChartData,
   fetchDirectQuote,
   fetchDirectQuotes,
@@ -134,23 +139,30 @@ export async function fetchQuote(ticker: string): Promise<StockQuote | null> {
 }
 
 export async function fetchQuotes(tickers: string[]): Promise<StockQuote[]> {
-  const direct = await fetchDirectQuotes(tickers);
-  if (direct.length > 0) {
-    const directMap = new Map(direct.map((q) => [q.ticker, q]));
-    const missing = tickers.filter((t) => !directMap.has(t));
-    if (missing.length === 0) return direct;
+  if (tickers.length === 0) return [];
 
-    const fallback = await Promise.all(
-      missing.map((t) => fetchQuoteFromLibrary(t))
-    );
-    return [
-      ...direct,
-      ...fallback.filter((q): q is StockQuote => q !== null),
-    ];
+  const cached = getCachedQuotes(tickers);
+  const cachedMap = new Map(cached.map((quote) => [quote.ticker, quote]));
+  const staleTickers = tickers.filter((ticker) => !cachedMap.has(ticker));
+
+  let fresh: StockQuote[] = [];
+  if (staleTickers.length > 0) {
+    fresh = await fetchDirectQuotes(staleTickers);
+    if (fresh.length > 0) {
+      setCachedQuotes(fresh);
+    }
   }
 
-  const results = await Promise.all(tickers.map((t) => fetchQuoteFromLibrary(t)));
-  return results.filter((q): q is StockQuote => q !== null);
+  const merged = [
+    ...cached,
+    ...fresh.filter((quote) => !cachedMap.has(quote.ticker)),
+  ];
+
+  if (merged.length > 0) {
+    return merged;
+  }
+
+  return getStaleCachedQuotes(tickers);
 }
 
 function buildDetailFromQuote(

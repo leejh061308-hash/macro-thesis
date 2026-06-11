@@ -91,23 +91,37 @@ export default function StocksPage() {
       }
 
       const nextStocks = data.stocks ?? [];
-      setStocks(nextStocks);
-      setLastUpdated(new Date());
+      const hasPrices = nextStocks.some((stock) => stock.price > 0);
+      const keepPrevious =
+        !hasPrices && stocksRef.current.some((stock) => stock.price > 0);
 
-      if (data.quoteStatus === "failed") {
-        const message =
-          "시세 서버 응답이 지연되고 있습니다. 잠시 후 자동으로 다시 시도합니다.";
-        if (silent) {
-          setWarning(message);
-        } else {
-          setError(message);
-        }
-      } else if (data.quoteStatus === "partial") {
-        setWarning("일부 종목 시세만 불러왔습니다. 곧 다시 갱신합니다.");
+      if (keepPrevious) {
+        setLastUpdated(new Date());
+        setWarning(
+          "최신 시세를 불러오지 못했습니다. 이전 시세를 표시 중이며 자동으로 다시 시도합니다."
+        );
         setError(null);
       } else {
-        setError(null);
-        setWarning(null);
+        setStocks(nextStocks);
+        setLastUpdated(new Date());
+
+        if (!hasPrices) {
+          const message =
+            "시세 서버 응답이 지연되고 있습니다. 잠시 후 자동으로 다시 시도합니다.";
+          if (silent) {
+            setWarning(message);
+            setError(null);
+          } else {
+            setError(message);
+            setWarning(null);
+          }
+        } else if (data.quoteStatus === "partial") {
+          setWarning("일부 종목 시세만 불러왔습니다. 곧 다시 갱신합니다.");
+          setError(null);
+        } else {
+          setError(null);
+          setWarning(null);
+        }
       }
     } catch (err) {
       const message =

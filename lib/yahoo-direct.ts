@@ -10,8 +10,8 @@ const YAHOO_HOSTS = [
   "https://query2.finance.yahoo.com",
 ] as const;
 
-const FETCH_TIMEOUT = 12_000;
-const MAX_RETRIES = 2;
+const FETCH_TIMEOUT = 7_000;
+const SPARK_TIMEOUT = 5_000;
 
 const PERIOD_PARAMS: Record<
   ChartPeriod,
@@ -116,10 +116,14 @@ function seriesToChartPoints(
     .filter((point): point is ChartDataPoint => point !== null);
 }
 
-async function yahooFetch(url: string, label: string): Promise<Response> {
+async function fetchYahooJson<T>(
+  urls: string[],
+  timeoutMs: number,
+  label: string
+): Promise<T> {
   let lastError: unknown;
 
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+  for (const url of urls) {
     try {
       const response = await withTimeout(
         fetch(url, {
@@ -129,7 +133,7 @@ async function yahooFetch(url: string, label: string): Promise<Response> {
           },
           cache: "no-store",
         }),
-        FETCH_TIMEOUT,
+        timeoutMs,
         label
       );
 
@@ -137,12 +141,9 @@ async function yahooFetch(url: string, label: string): Promise<Response> {
         throw new Error(`${label} HTTP ${response.status}`);
       }
 
-      return response;
+      return (await response.json()) as T;
     } catch (error) {
       lastError = error;
-      if (attempt < MAX_RETRIES - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
-      }
     }
   }
 
@@ -153,74 +154,32 @@ function encodeSymbols(tickers: string[]): string {
   return tickers.map((ticker) => encodeURIComponent(ticker)).join(",");
 }
 
-async function fetchSparkResponse(
-  tickers: string[],
-  interval: string,
-  range: string
-): Promise<YahooSparkResponse> {
-  const symbols = encodeSymbols(tickers);
-  let lastError: unknown;
-
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    const host = YAHOO_HOSTS[attempt % YAHOO_HOSTS.length];
-    const url = `${host}/v7/finance/spark?symbols=${symbols}&interval=${interval}&range=${range}`;
-
-    try {
-      const response = await yahooFetch(url, "yahoo spark");
-      const json = (await response.json()) as YahooSparkResponse;
-
-      if (json.spark?.error) {
-        throw new Error(json.spark.error.description ?? "Yahoo spark error");
-      }
-      if (!json.spark?.result?.length) {
-        throw new Error("Yahoo spark returned no data");
-      }
-
-      return json;
-    } catch (error) {
-      lastError = error;
-      if (attempt < MAX_RETRIES - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
-      }
-    }
-  }
-
-  throw lastError;
+function chartQuoteUrls(ticker: string): string[] {
+  const encoded = encodeURIComponent(ticker);
+  return YAHOO_HOSTS.map(
+    (host) =>
+      `${host}/v8/finance/chart/${encoded}?interval=1d&range=1d&includePrePost=false`
+  );
 }
 
-async function fetchChartResponse(
+function chartDataUrls(
   ticker: string,
   interval: string,
   range: string
-): Promise<YahooChartResponse> {
+): string[] {
   const encoded = encodeURIComponent(ticker);
-  let lastError: unknown;
+  return YAHOO_HOSTS.map(
+    (host) =>
+      `${host}/v8/finance/chart/${encoded}?interval=${interval}&range=${range}&includePrePost=false`
+  );
+}
 
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    const host = YAHOO_HOSTS[attempt % YAHOO_HOSTS.length];
-    const url = `${host}/v8/finance/chart/${encoded}?interval=${interval}&range=${range}&includePrePost=false`;
-
-    try {
-      const response = await yahooFetch(url, "yahoo chart");
-      const json = (await response.json()) as YahooChartResponse;
-
-      if (json.chart?.error) {
-        throw new Error(json.chart.error.description ?? "Yahoo chart error");
-      }
-      if (!json.chart?.result?.[0]) {
-        throw new Error("Yahoo chart returned no data");
-      }
-
-      return json;
-    } catch (error) {
-      lastError = error;
-      if (attempt < MAX_RETRIES - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
-      }
-    }
-  }
-
-  throw lastError;
+function sparkUrls(tickers: string[], interval: string, range: string): string[] {
+  const symbols = encodeSymbols(tickers);
+  return YAHOO_HOSTS.map(
+    (host) =>
+      `${host}/v7/finance/spark?symbols=${symbols}&interval=${interval}&range=${range}`
+  );
 }
 
 function quotesFromSpark(json: YahooSparkResponse): StockQuote[] {
@@ -238,25 +197,47 @@ function quotesFromSpark(json: YahooSparkResponse): StockQuote[] {
   return quotes;
 }
 
+async function fetchChartQuote(ticker: string): Promise<StockQuote | null> {
+  try {
+    const json = await fetchYahooJson<YahooChartResponse>(
+      chartQuoteUrls(ticker),
+      FETCH_TIMEOUT,
+      "yahoo chart quote"
+    );
+    const meta = json.chart?.result?.[0]?.meta;
+    if (!meta) return null;
+    return quoteFromMeta(meta, ticker);
+  } catch (error) {
+    console.error(`[yahoo-direct] chart quote failed for ${ticker}:`, error);
+    return null;
+  }
+}
+
+async function fetchSparkQuotes(tickers: string[]): Promise<StockQuote[]> {
+  const json = await fetchYahooJson<YahooSparkResponse>(
+    sparkUrls(tickers, "5m", "1d"),
+    SPARK_TIMEOUT,
+    "yahoo spark"
+  );
+
+  if (json.spark?.error) {
+    throw new Error(json.spark.error.description ?? "Yahoo spark error");
+  }
+
+  return quotesFromSpark(json);
+}
+
 export async function fetchDirectQuote(
   ticker: string
 ): Promise<StockQuote | null> {
   try {
-    const json = await fetchSparkResponse([ticker], "5m", "1d");
-    return quotesFromSpark(json)[0] ?? null;
+    const sparkQuotes = await fetchSparkQuotes([ticker]);
+    if (sparkQuotes[0]) return sparkQuotes[0];
   } catch (error) {
     console.error(`[yahoo-direct] spark quote failed for ${ticker}:`, error);
-
-    try {
-      const json = await fetchChartResponse(ticker, "1d", "1d");
-      const meta = json.chart?.result?.[0]?.meta;
-      if (!meta) return null;
-      return quoteFromMeta(meta, ticker);
-    } catch (chartError) {
-      console.error(`[yahoo-direct] chart quote failed for ${ticker}:`, chartError);
-      return null;
-    }
   }
+
+  return fetchChartQuote(ticker);
 }
 
 export async function fetchDirectQuotes(
@@ -264,28 +245,30 @@ export async function fetchDirectQuotes(
 ): Promise<StockQuote[]> {
   if (tickers.length === 0) return [];
 
+  const quoteMap = new Map<string, StockQuote>();
+
   try {
-    const json = await fetchSparkResponse(tickers, "5m", "1d");
-    const quotes = quotesFromSpark(json);
-    if (quotes.length > 0) return quotes;
+    const sparkQuotes = await fetchSparkQuotes(tickers);
+    for (const quote of sparkQuotes) {
+      quoteMap.set(quote.ticker, quote);
+    }
   } catch (error) {
     console.error("[yahoo-direct] batch spark quote failed:", error);
   }
 
-  const quotes: StockQuote[] = [];
-  const concurrency = 2;
-
-  for (let i = 0; i < tickers.length; i += concurrency) {
-    const batch = tickers.slice(i, i + concurrency);
-    const batchResults = await Promise.all(
-      batch.map((ticker) => fetchDirectQuote(ticker))
+  const missing = tickers.filter((ticker) => !quoteMap.has(ticker));
+  if (missing.length > 0) {
+    const chartQuotes = await Promise.all(
+      missing.map((ticker) => fetchChartQuote(ticker))
     );
-    for (const quote of batchResults) {
-      if (quote) quotes.push(quote);
+    for (const quote of chartQuotes) {
+      if (quote) quoteMap.set(quote.ticker, quote);
     }
   }
 
-  return quotes;
+  return tickers
+    .map((ticker) => quoteMap.get(ticker))
+    .filter((quote): quote is StockQuote => !!quote);
 }
 
 export async function fetchDirectChartData(
@@ -295,7 +278,11 @@ export async function fetchDirectChartData(
   const params = PERIOD_PARAMS[period];
 
   try {
-    const json = await fetchSparkResponse([ticker], params.interval, params.range);
+    const json = await fetchYahooJson<YahooSparkResponse>(
+      sparkUrls([ticker], params.interval, params.range),
+      FETCH_TIMEOUT,
+      "yahoo spark chart"
+    );
     const series = json.spark?.result?.[0]?.response?.[0];
     if (series) {
       const points = seriesToChartPoints(series, period);
@@ -309,10 +296,10 @@ export async function fetchDirectChartData(
   }
 
   try {
-    const json = await fetchChartResponse(
-      ticker,
-      params.interval,
-      params.range
+    const json = await fetchYahooJson<YahooChartResponse>(
+      chartDataUrls(ticker, params.interval, params.range),
+      FETCH_TIMEOUT,
+      "yahoo chart"
     );
     const result = json.chart?.result?.[0];
     if (!result) return [];

@@ -30,12 +30,15 @@ export async function GET() {
     };
   });
 
+  const pricedCount = stocks.filter((stock) => stock.price > 0).length;
   const quoteStatus =
-    quotes.length === 0
+    pricedCount === 0
       ? "failed"
-      : quotes.length < tickers.length
+      : pricedCount < tickers.length
         ? "partial"
-        : "ok";
+        : quotes.length < tickers.length
+          ? "stale"
+          : "ok";
 
   return NextResponse.json(
     { stocks, quoteStatus },
