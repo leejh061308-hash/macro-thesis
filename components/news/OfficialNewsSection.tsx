@@ -22,6 +22,8 @@ export default function OfficialNewsSection() {
   const [isLoading, setIsLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const postsRef = useRef<OfficialNewsItem[]>([]);
   const tapCountRef = useRef(0);
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const adminKeyRef = useRef("");
@@ -29,6 +31,10 @@ export default function OfficialNewsSection() {
   useEffect(() => {
     adminKeyRef.current = adminKey;
   }, [adminKey]);
+
+  useEffect(() => {
+    postsRef.current = posts;
+  }, [posts]);
 
   const verifyKey = useCallback(async (key: string): Promise<boolean> => {
     try {
@@ -113,8 +119,12 @@ export default function OfficialNewsSection() {
   }, []);
 
   const loadPosts = useCallback(
-    async (key?: string) => {
-      setIsLoading(true);
+    async (key?: string, silent = false) => {
+      if (!silent) {
+        setIsLoading(true);
+        setLoadError(null);
+      }
+
       try {
         const authKey = key ?? adminKeyRef.current;
         const headers: HeadersInit = authKey ? authHeaders(authKey) : {};
@@ -130,14 +140,26 @@ export default function OfficialNewsSection() {
 
         const items: OfficialNewsItem[] = data.posts ?? [];
         setPosts(items);
+        setLoadError(null);
         if (authKey) {
           setCanWrite(!!data.canWrite);
         }
         loadPendingAnalysis(items);
-      } catch {
-        setPosts([]);
+      } catch (err) {
+        if (postsRef.current.length > 0) {
+          setLoadError(
+            err instanceof Error
+              ? err.message
+              : "메인 뉴스를 다시 불러오지 못했습니다."
+          );
+        } else {
+          setPosts([]);
+          setLoadError("메인 뉴스를 불러오지 못했습니다.");
+        }
       } finally {
-        setIsLoading(false);
+        if (!silent) {
+          setIsLoading(false);
+        }
       }
     },
     [loadPendingAnalysis]
@@ -281,6 +303,12 @@ export default function OfficialNewsSection() {
       {actionMessage && (
         <div className="rounded-lg border border-accent/30 bg-accent/10 px-4 py-2.5 text-sm text-accent">
           {actionMessage}
+        </div>
+      )}
+
+      {loadError && (
+        <div className="rounded-lg border border-bearish/30 bg-bearish/10 px-4 py-2.5 text-sm text-bearish">
+          {loadError}
         </div>
       )}
 

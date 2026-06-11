@@ -2,7 +2,19 @@ import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
 
-const DATA_DIR = path.join(process.cwd(), "data");
+function resolveDataDir(): string {
+  const configured =
+    process.env.DATA_DIR?.trim() ||
+    process.env.RAILWAY_VOLUME_MOUNT_PATH?.trim();
+
+  if (configured) {
+    return path.resolve(configured);
+  }
+
+  return path.join(process.cwd(), "data");
+}
+
+const DATA_DIR = resolveDataDir();
 const DB_PATH = path.join(DATA_DIR, "macrolens.db");
 
 const WATCHLIST_VERSION = 2;
@@ -99,6 +111,10 @@ function migrateWatchlist(database: Database.Database) {
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`
     )
     .run(String(WATCHLIST_VERSION));
+}
+
+export function getDataDir(): string {
+  return DATA_DIR;
 }
 
 export function getDb(): Database.Database {
