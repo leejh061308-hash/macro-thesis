@@ -45,8 +45,25 @@ function mergeNewsItems(prev: NewsItem[], incoming: NewsItem[]): NewsItem[] {
   });
 }
 
+function applySummaryUpdates(
+  items: NewsItem[],
+  merged: Record<string, { summary: string; marketImpact: string }>
+): NewsItem[] {
+  return items.map((item) =>
+    merged[item.id]
+      ? {
+          ...item,
+          summary: merged[item.id].summary,
+          marketImpact: merged[item.id].marketImpact,
+          summaryPending: false,
+        }
+      : item
+  );
+}
+
 export default function NewsPage() {
   const [news, setNews] = useState<NewsItem[]>([]);
+  const [brokerReports, setBrokerReports] = useState<NewsItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
@@ -82,7 +99,9 @@ export default function NewsPage() {
                 })),
               }),
             });
-            if (!res.ok) return {} as Record<string, { summary: string; marketImpact: string }>;
+            if (!res.ok) {
+              return {} as Record<string, { summary: string; marketImpact: string }>;
+            }
             const data = await res.json();
             return (data.summaries ?? {}) as Record<
               string,
@@ -94,18 +113,8 @@ export default function NewsPage() {
         const merged = Object.assign({}, ...results);
         if (Object.keys(merged).length === 0) continue;
 
-        setNews((prev) =>
-          prev.map((item) =>
-            merged[item.id]
-              ? {
-                  ...item,
-                  summary: merged[item.id].summary,
-                  marketImpact: merged[item.id].marketImpact,
-                  summaryPending: false,
-                }
-              : item
-          )
-        );
+        setNews((prev) => applySummaryUpdates(prev, merged));
+        setBrokerReports((prev) => applySummaryUpdates(prev, merged));
       }
     } catch {
       // 요약 실패해도 뉴스 목록은 유지
@@ -136,15 +145,25 @@ export default function NewsPage() {
           throw new Error(data.error || "뉴스를 불러오지 못했습니다.");
         }
 
-        const items: NewsItem[] = data.news ?? [];
-        setNews((prev) => (silent ? mergeNewsItems(prev, items) : items));
+        const generalItems: NewsItem[] = data.news ?? [];
+        const brokerItems: NewsItem[] = data.brokerReports ?? [];
+
+        if (silent) {
+          setNews((prev) => mergeNewsItems(prev, generalItems));
+          setBrokerReports((prev) => mergeNewsItems(prev, brokerItems));
+        } else {
+          setNews(generalItems);
+          setBrokerReports(brokerItems);
+        }
+
         setLastUpdated(new Date());
         if (!silent) setError(null);
 
-        loadSummaries(items);
+        loadSummaries([...generalItems, ...brokerItems]);
       } catch (err) {
         if (!silent) {
           setNews([]);
+          setBrokerReports([]);
           setError(
             err instanceof Error && err.name === "AbortError"
               ? "뉴스 로딩 시간이 초과되었습니다. 새로고침해 주세요."
@@ -168,15 +187,15 @@ export default function NewsPage() {
     loadNews();
   }, [loadNews]);
 
-  const pendingCount = news.filter(
-    (item) => item.summaryPending && !item.summary
-  ).length;
+  const pendingCount =
+    news.filter((item) => item.summaryPending && !item.summary).length +
+    brokerReports.filter((item) => item.summaryPending && !item.summary).length;
 
   useEffect(() => {
     if (pendingCount > 0 && !isLoading && !summarizingRef.current) {
-      loadSummaries(news);
+      loadSummaries([...news, ...brokerReports]);
     }
-  }, [pendingCount, news, isLoading, loadSummaries]);
+  }, [pendingCount, news, brokerReports, isLoading, loadSummaries]);
 
   useAutoRefresh(
     () => loadNews({ silent: true }),
@@ -190,68 +209,104 @@ export default function NewsPage() {
       <OfficialNewsSection />
 
       <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-white">정치·경제 뉴스</h2>
-          <p className="text-[11px] text-gray-500">
-            정치·경제·시장 헤드라인 · AI 요약 · 원문 링크 제공
-          </p>
-          {isLoading ? (
-            <p className="mt-1 text-xs text-neutral">뉴스 불러오는 중...</p>
-          ) : (
-            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-              <RefreshStatus
-                lastUpdated={lastUpdated}
-                isRefreshing={isRefreshing}
-                intervalSec={NEWS_REFRESH_INTERVAL / 1000}
-              />
-              {isSummarizing && (
-                <span className="text-xs text-gray-400">· 요약 생성 중...</span>
-              )}
-            </div>
-          )}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-white">증권사 리포트</h2>
+            <p className="text-[11px] text-gray-500">
+              목표가·등급 변경 헤드라인 · AI 요약 · 원문 링크
+            </p>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={() => loadNews({ fresh: true })}
-          disabled={isLoading}
-          className="rounded-lg border border-surface-border px-3 py-1.5 text-xs text-gray-300 transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-50"
-        >
-          {isLoading ? "불러오는 중..." : "새로고침"}
-        </button>
+
+        {isLoading && (
+          <div className="space-y-3">
+            {[1, 2].map((i) => (
+              <div
+                key={`broker-skeleton-${i}`}
+                className="h-36 animate-pulse rounded-xl border border-surface-border bg-surface-card"
+              />
+            ))}
+          </div>
+        )}
+
+        {!isLoading && !error && brokerReports.length === 0 && (
+          <div className="rounded-xl border border-dashed border-surface-border px-4 py-6 text-center text-sm text-gray-500">
+            최근 목표가·등급 변경 헤드라인이 없습니다.
+          </div>
+        )}
+
+        {!isLoading && !error && brokerReports.length > 0 && (
+          <div className="space-y-3">
+            {brokerReports.map((item) => (
+              <NewsCard key={item.id} item={item} />
+            ))}
+          </div>
+        )}
       </div>
 
-      {isLoading && (
-        <div className="space-y-3">
-          {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="h-36 animate-pulse rounded-xl border border-surface-border bg-surface-card"
-            />
-          ))}
-        </div>
-      )}
-
-      {error && !isLoading && (
-        <div className="rounded-lg border border-bearish/30 bg-bearish/10 px-4 py-3 text-sm text-bearish">
-          {error}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-white">정치·경제 뉴스</h2>
+            <p className="text-[11px] text-gray-500">
+              정치·경제·시장 헤드라인 · AI 요약 · 원문 링크 제공
+            </p>
+            {isLoading ? (
+              <p className="mt-1 text-xs text-neutral">뉴스 불러오는 중...</p>
+            ) : (
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <RefreshStatus
+                  lastUpdated={lastUpdated}
+                  isRefreshing={isRefreshing}
+                  intervalSec={NEWS_REFRESH_INTERVAL / 1000}
+                />
+                {isSummarizing && (
+                  <span className="text-xs text-gray-400">· 요약 생성 중...</span>
+                )}
+              </div>
+            )}
+          </div>
           <button
             type="button"
             onClick={() => loadNews({ fresh: true })}
-            className="mt-2 block text-xs underline hover:text-white"
+            disabled={isLoading}
+            className="rounded-lg border border-surface-border px-3 py-1.5 text-xs text-gray-300 transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-50"
           >
-            지금 다시 시도
+            {isLoading ? "불러오는 중..." : "새로고침"}
           </button>
         </div>
-      )}
 
-      {!isLoading && !error && (
-        <div className="space-y-3">
-          {news.map((item) => (
-            <NewsCard key={item.id} item={item} />
-          ))}
-        </div>
-      )}
+        {isLoading && (
+          <div className="space-y-3">
+            {[1, 2, 3, 4].map((i) => (
+              <div
+                key={`news-skeleton-${i}`}
+                className="h-36 animate-pulse rounded-xl border border-surface-border bg-surface-card"
+              />
+            ))}
+          </div>
+        )}
+
+        {error && !isLoading && (
+          <div className="rounded-lg border border-bearish/30 bg-bearish/10 px-4 py-3 text-sm text-bearish">
+            {error}
+            <button
+              type="button"
+              onClick={() => loadNews({ fresh: true })}
+              className="mt-2 block text-xs underline hover:text-white"
+            >
+              지금 다시 시도
+            </button>
+          </div>
+        )}
+
+        {!isLoading && !error && (
+          <div className="space-y-3">
+            {news.map((item) => (
+              <NewsCard key={item.id} item={item} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

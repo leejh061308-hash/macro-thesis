@@ -63,7 +63,7 @@ const RSS_FEEDS = [
 const USER_AGENT =
   "Mozilla/5.0 (compatible; MacroLens/1.0; Investment Research)";
 
-const MAX_NEWS_ITEMS = 32;
+const MAX_NEWS_POOL = 96;
 const RSS_CACHE_MS = 120_000;
 
 let newsCache: { data: RawNewsItem[]; fetchedAt: number } | null = null;
@@ -156,7 +156,7 @@ async function fetchFreshNews(): Promise<RawNewsItem[]> {
     throw new Error("All RSS feeds failed");
   }
 
-  return dedupeAndSort(allItems).slice(0, MAX_NEWS_ITEMS);
+  return dedupeAndSort(allItems).slice(0, MAX_NEWS_POOL);
 }
 
 export async function fetchMarketNews(options?: {
