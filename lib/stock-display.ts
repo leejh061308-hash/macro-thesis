@@ -38,15 +38,13 @@ export function resolveStockDisplayName(ticker: string, name = ""): string {
 
 export function getStockHeadline(ticker: string, name = ""): {
   primary: string;
-  secondary: string;
+  secondary?: string;
 } {
   const displayName = resolveStockDisplayName(ticker, name);
 
   if (usesStockNameAsHeadline(ticker)) {
-    const normalized = normalizeTicker(ticker);
     return {
       primary: displayName,
-      secondary: isIndexTicker(normalized) ? normalized : normalized,
     };
   }
 

@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { formatChange, formatPrice } from "@/lib/format";
 import { getStockHeadline } from "@/lib/stock-display";
@@ -23,14 +25,14 @@ export default function StockCard({
         href={`/stocks/${encodeURIComponent(stock.ticker)}`}
         className="block min-w-0 flex-1 p-4"
       >
-        <div className="flex items-start justify-between">
-          <div>
-            <h3 className="text-lg font-bold text-white">{primary}</h3>
-            <p className="text-xs text-neutral truncate max-w-[180px] font-mono">
-              {secondary}
-            </p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="truncate text-lg font-bold text-white">{primary}</h3>
+            {secondary ? (
+              <p className="truncate text-xs text-neutral">{secondary}</p>
+            ) : null}
           </div>
-          <div className="text-right">
+          <div className="shrink-0 text-right">
             <p className="font-mono text-lg font-semibold text-white">
               {formatPrice(stock.price, stock.currency)}
             </p>

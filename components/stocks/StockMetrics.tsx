@@ -51,7 +51,9 @@ export default function StockMetrics({ detail }: StockMetricsProps) {
         <div className="flex items-baseline justify-between">
           <div>
             <h2 className="text-2xl font-bold text-white">{primary}</h2>
-            <p className="text-sm text-neutral font-mono">{secondary}</p>
+            {secondary ? (
+              <p className="text-sm text-neutral">{secondary}</p>
+            ) : null}
           </div>
           <div className="text-right">
             <p className="font-mono text-2xl font-bold text-white">

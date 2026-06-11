@@ -112,10 +112,11 @@ export default function TickerSearch({
                 className="flex-1 text-left"
               >
                 <span className="font-semibold text-accent">{primary}</span>
-                <p className="text-xs text-gray-400 truncate max-w-[200px] font-mono">
-                  {secondary}
-                  {result.exchange ? ` · ${result.exchange}` : ""}
-                </p>
+                {(secondary || result.exchange) && (
+                  <p className="text-xs text-gray-400 truncate max-w-[200px]">
+                    {[secondary, result.exchange].filter(Boolean).join(" · ")}
+                  </p>
+                )}
               </button>
               {showWatchlistAction && onAddWatchlist && (
                 <button

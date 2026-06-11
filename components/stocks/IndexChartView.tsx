@@ -21,7 +21,6 @@ export default function IndexChartView({ ticker }: IndexChartViewProps) {
       <div className="rounded-xl border border-surface-border bg-surface-card p-5 card-glow">
         <p className="text-[11px] uppercase tracking-wide text-gray-400">지수</p>
         <h2 className="mt-1 text-xl font-bold text-white">{name}</h2>
-        <p className="font-mono text-xs text-neutral">{ticker}</p>
         <p className="mt-2 text-[11px] text-gray-500">
           정규장(본장) 기준 · 장외마켓 미반영
         </p>
