@@ -4,11 +4,14 @@ import { createTitleHash } from "@/lib/hash";
 import { isLikelyEnglish } from "@/lib/korean";
 import { getApiKey, getOpenAIClient } from "@/lib/openai";
 import {
+  buildNewsSummaryAntiCopyPrompt,
   buildNewsSummaryPrompt,
   buildNewsSummaryRetryPrompt,
+  NEWS_SUMMARY_ANTI_COPY_RETRY_PROMPT,
   NEWS_SUMMARY_PROMPT_VERSION,
   NEWS_SUMMARY_SYSTEM_PROMPT,
 } from "@/lib/prompts/news";
+import { isWeakHeadlineSummary } from "@/lib/summary-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -28,10 +31,20 @@ function newsTitleHash(title: string): string {
 async function summarizeOne(
   title: string,
   source: string,
-  retry = false
+  options?: { retryKorean?: boolean; retryAntiCopy?: boolean }
 ): Promise<string | null> {
   const apiKey = getApiKey();
   if (!apiKey || !apiKey.startsWith("sk-")) return null;
+
+  const userContent = options?.retryAntiCopy
+    ? buildNewsSummaryAntiCopyPrompt(title, source)
+    : options?.retryKorean
+      ? buildNewsSummaryRetryPrompt(title, source)
+      : buildNewsSummaryPrompt(title, source);
+
+  const systemContent = options?.retryAntiCopy
+    ? `${NEWS_SUMMARY_SYSTEM_PROMPT}\n\n${NEWS_SUMMARY_ANTI_COPY_RETRY_PROMPT}`
+    : NEWS_SUMMARY_SYSTEM_PROMPT;
 
   try {
     const openai = getOpenAIClient();
@@ -39,15 +52,10 @@ async function summarizeOne(
       {
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: NEWS_SUMMARY_SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: retry
-              ? buildNewsSummaryRetryPrompt(title, source)
-              : buildNewsSummaryPrompt(title, source),
-          },
+          { role: "system", content: systemContent },
+          { role: "user", content: userContent },
         ],
-        temperature: 0.3,
+        temperature: options?.retryAntiCopy ? 0.5 : 0.4,
         max_tokens: 280,
       },
       { timeout: 12_000 }
@@ -58,14 +66,24 @@ async function summarizeOne(
   }
 }
 
-async function summarizeWithKoreanCheck(
+async function summarizeWithQualityChecks(
   title: string,
   source: string
 ): Promise<string | null> {
   let summary = await summarizeOne(title, source);
+
   if (summary && isLikelyEnglish(summary)) {
-    summary = await summarizeOne(title, source, true);
+    summary = await summarizeOne(title, source, { retryKorean: true });
   }
+
+  if (summary && isWeakHeadlineSummary(summary)) {
+    summary = await summarizeOne(title, source, { retryAntiCopy: true });
+  }
+
+  if (summary && isLikelyEnglish(summary)) {
+    return null;
+  }
+
   return summary;
 }
 
@@ -83,12 +101,12 @@ async function runWithConcurrency(
 
       const titleHash = newsTitleHash(item.title);
       const cached = getCachedSummary(item.id, titleHash);
-      if (cached && !isLikelyEnglish(cached)) {
+      if (cached && !isLikelyEnglish(cached) && !isWeakHeadlineSummary(cached)) {
         results[item.id] = cached;
         continue;
       }
 
-      const summary = await summarizeWithKoreanCheck(item.title, item.source);
+      const summary = await summarizeWithQualityChecks(item.title, item.source);
       const text = summary ?? "AI 요약을 생성하지 못했습니다.";
       cacheSummary(item.id, titleHash, text);
       results[item.id] = text;
