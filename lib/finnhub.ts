@@ -1,8 +1,31 @@
 import { withTimeout } from "@/lib/timeout";
-import type { StockQuote } from "@/lib/types";
+import type { SearchResult, StockDetail, StockQuote } from "@/lib/types";
 
 const FINNHUB_TIMEOUT = 8_000;
-const FINNHUB_BASE = "https://finnhub.io/api/v1/quote";
+const FINNHUB_API = "https://finnhub.io/api/v1";
+
+function getFinnhubToken(): string | null {
+  return process.env.FINNHUB_API_KEY?.trim() || null;
+}
+
+async function finnhubGet<T>(path: string, label: string): Promise<T | null> {
+  const token = getFinnhubToken();
+  if (!token) return null;
+
+  try {
+    const url = `${FINNHUB_API}${path}${path.includes("?") ? "&" : "?"}token=${token}`;
+    const response = await withTimeout(
+      fetch(url, { cache: "no-store" }),
+      FINNHUB_TIMEOUT,
+      label
+    );
+    if (!response.ok) return null;
+    return (await response.json()) as T;
+  } catch (error) {
+    console.error(`[finnhub] ${label} failed:`, error);
+    return null;
+  }
+}
 
 function finnhubSymbol(ticker: string): string | null {
   if (ticker.startsWith("^")) return ticker;
@@ -10,15 +33,87 @@ function finnhubSymbol(ticker: string): string | null {
 }
 
 export function isFinnhubConfigured(): boolean {
-  return !!process.env.FINNHUB_API_KEY?.trim();
+  return !!getFinnhubToken();
+}
+
+export async function searchFinnhubTickers(query: string): Promise<SearchResult[]> {
+  if (!query.trim() || !isFinnhubConfigured()) return [];
+
+  const data = await finnhubGet<{
+    result?: Array<{
+      symbol?: string;
+      description?: string;
+      displaySymbol?: string;
+      type?: string;
+    }>;
+  }>(`/search?q=${encodeURIComponent(query.trim())}`, "search");
+
+  return (data?.result ?? [])
+    .filter((item) => typeof item.symbol === "string")
+    .slice(0, 8)
+    .map((item) => ({
+      ticker: item.symbol as string,
+      name: item.description || item.displaySymbol || (item.symbol as string),
+      exchange: item.type ?? "",
+    }));
+}
+
+export async function fetchFinnhubStockDetail(
+  ticker: string
+): Promise<StockDetail | null> {
+  const symbol = finnhubSymbol(ticker);
+  if (!symbol || !isFinnhubConfigured()) return null;
+
+  const [quoteData, profile, metrics] = await Promise.all([
+    finnhubGet<{ c?: number; d?: number; dp?: number }>(
+      `/quote?symbol=${encodeURIComponent(symbol)}`,
+      "quote"
+    ),
+    finnhubGet<{
+      name?: string;
+      marketCapitalization?: number;
+      currency?: string;
+    }>(`/stock/profile2?symbol=${encodeURIComponent(symbol)}`, "profile"),
+    finnhubGet<{
+      metric?: Record<string, number | null>;
+      metricType?: string;
+      series?: Record<string, Array<{ period: string; v: number }>>;
+    }>(`/stock/metric?symbol=${encodeURIComponent(symbol)}&metric=all`, "metric"),
+  ]);
+
+  if (!quoteData?.c || quoteData.c <= 0) return null;
+
+  const metric = metrics?.metric ?? {};
+
+  return {
+    ticker,
+    name: profile?.name ?? ticker,
+    price: quoteData.c,
+    change: quoteData.d ?? 0,
+    changePercent: quoteData.dp ?? 0,
+    session: "regular",
+    marketCap:
+      profile?.marketCapitalization != null
+        ? profile.marketCapitalization * 1_000_000
+        : null,
+    peRatio: metric.peBasic ?? metric.peTTM ?? null,
+    pbRatio: metric.pbAnnual ?? metric.pbQuarterly ?? null,
+    roe: metric.roeTTM ?? metric.roeAnnual ?? null,
+    revenue: metric.revenuePerShareAnnual ?? null,
+    netIncome: null,
+    debtToEquity: metric["totalDebt/totalEquityAnnual"] ?? null,
+    dividendYield: metric.dividendYieldIndicatedAnnual ?? null,
+    fiftyTwoWeekHigh: metric["52WeekHigh"] ?? null,
+    fiftyTwoWeekLow: metric["52WeekLow"] ?? null,
+    currency: profile?.currency ?? "USD",
+  };
 }
 
 export async function fetchFinnhubQuotes(
   tickers: string[],
   names: Record<string, string> = {}
 ): Promise<StockQuote[]> {
-  const token = process.env.FINNHUB_API_KEY?.trim();
-  if (!token || tickers.length === 0) return [];
+  if (tickers.length === 0 || !isFinnhubConfigured()) return [];
 
   const quotes: StockQuote[] = [];
 
@@ -26,36 +121,22 @@ export async function fetchFinnhubQuotes(
     const symbol = finnhubSymbol(ticker);
     if (!symbol) continue;
 
-    try {
-      const url = `${FINNHUB_BASE}?symbol=${encodeURIComponent(symbol)}&token=${token}`;
-      const response = await withTimeout(
-        fetch(url, { cache: "no-store" }),
-        FINNHUB_TIMEOUT,
-        "finnhub quote"
-      );
+    const data = await finnhubGet<{ c?: number; d?: number; dp?: number }>(
+      `/quote?symbol=${encodeURIComponent(symbol)}`,
+      "quote"
+    );
 
-      if (!response.ok) continue;
+    if (!data?.c || data.c <= 0) continue;
 
-      const data = (await response.json()) as {
-        c?: number;
-        d?: number;
-        dp?: number;
-      };
-
-      if (!data.c || data.c <= 0) continue;
-
-      quotes.push({
-        ticker,
-        name: names[ticker] ?? ticker,
-        price: data.c,
-        change: data.d ?? 0,
-        changePercent: data.dp ?? 0,
-        currency: "USD",
-        session: "regular",
-      });
-    } catch (error) {
-      console.error(`[finnhub] quote failed for ${ticker}:`, error);
-    }
+    quotes.push({
+      ticker,
+      name: names[ticker] ?? ticker,
+      price: data.c,
+      change: data.d ?? 0,
+      changePercent: data.dp ?? 0,
+      currency: "USD",
+      session: "regular",
+    });
   }
 
   return quotes;

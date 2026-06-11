@@ -7,7 +7,12 @@ import {
   getStaleCachedQuotes,
   setCachedQuotes,
 } from "@/lib/quote-cache";
-import { fetchFinnhubQuotes, isFinnhubConfigured } from "@/lib/finnhub";
+import {
+  fetchFinnhubQuotes,
+  fetchFinnhubStockDetail,
+  isFinnhubConfigured,
+  searchFinnhubTickers,
+} from "@/lib/finnhub";
 import {
   fetchDirectChartData,
   fetchDirectQuote,
@@ -241,6 +246,28 @@ function buildDetailFromQuote(
   };
 }
 
+function buildDetailFromStockQuote(quote: StockQuote): StockDetail {
+  return {
+    ticker: quote.ticker,
+    name: quote.name,
+    price: quote.price,
+    change: quote.change,
+    changePercent: quote.changePercent,
+    session: quote.session,
+    marketCap: null,
+    peRatio: null,
+    pbRatio: null,
+    roe: null,
+    revenue: null,
+    netIncome: null,
+    debtToEquity: null,
+    dividendYield: null,
+    fiftyTwoWeekHigh: null,
+    fiftyTwoWeekLow: null,
+    currency: quote.currency,
+  };
+}
+
 export async function fetchStockDetail(
   ticker: string
 ): Promise<StockDetail | null> {
@@ -294,29 +321,39 @@ export async function fetchStockDetail(
       },
       ticker,
       {
-      marketCap: quote.marketCap ?? summaryDetail?.marketCap ?? null,
-      peRatio:
-        quote.trailingPE ??
-        summaryDetail?.trailingPE ??
-        keyStats?.trailingPE ??
-        null,
-      pbRatio: keyStats?.priceToBook ?? null,
-      roe: financial?.returnOnEquity ?? null,
-      revenue: financial?.totalRevenue ?? null,
-      netIncome:
-        summary.incomeStatementHistory?.incomeStatementHistory?.[0]
-          ?.netIncome ?? null,
-      debtToEquity: financial?.debtToEquity ?? null,
-      dividendYield: summaryDetail?.dividendYield ?? null,
-      fiftyTwoWeekHigh:
-        quote.fiftyTwoWeekHigh ?? summaryDetail?.fiftyTwoWeekHigh ?? null,
-      fiftyTwoWeekLow:
-        quote.fiftyTwoWeekLow ?? summaryDetail?.fiftyTwoWeekLow ?? null,
-    }
+        marketCap: quote.marketCap ?? summaryDetail?.marketCap ?? null,
+        peRatio:
+          quote.trailingPE ??
+          summaryDetail?.trailingPE ??
+          keyStats?.trailingPE ??
+          null,
+        pbRatio: keyStats?.priceToBook ?? null,
+        roe: financial?.returnOnEquity ?? null,
+        revenue: financial?.totalRevenue ?? null,
+        netIncome:
+          summary.incomeStatementHistory?.incomeStatementHistory?.[0]
+            ?.netIncome ?? null,
+        debtToEquity: financial?.debtToEquity ?? null,
+        dividendYield: summaryDetail?.dividendYield ?? null,
+        fiftyTwoWeekHigh:
+          quote.fiftyTwoWeekHigh ?? summaryDetail?.fiftyTwoWeekHigh ?? null,
+        fiftyTwoWeekLow:
+          quote.fiftyTwoWeekLow ?? summaryDetail?.fiftyTwoWeekLow ?? null,
+      }
     );
-  } catch {
-    return null;
+  } catch (error) {
+    console.error(`[yahoo] stock detail failed for ${ticker}:`, error);
   }
+
+  const finnhubDetail = await fetchFinnhubStockDetail(ticker);
+  if (finnhubDetail) return finnhubDetail;
+
+  const quote = await fetchQuote(ticker);
+  if (quote && quote.price > 0) {
+    return buildDetailFromStockQuote(quote);
+  }
+
+  return null;
 }
 
 async function fetchChartDataFromLibrary(
@@ -380,14 +417,18 @@ export async function searchTickers(query: string): Promise<SearchResult[]> {
       exchange?: string;
     }>;
 
-    return quotes
+    const results = quotes
       .filter((q) => typeof q.symbol === "string")
       .map((q) => ({
         ticker: q.symbol as string,
         name: q.shortname || q.longname || (q.symbol as string),
         exchange: q.exchange ?? "",
       }));
-  } catch {
-    return [];
+
+    if (results.length > 0) return results;
+  } catch (error) {
+    console.error("[yahoo] search failed:", error);
   }
+
+  return searchFinnhubTickers(query);
 }
