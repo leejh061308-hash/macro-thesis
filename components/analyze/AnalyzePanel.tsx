@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import AnalysisSections from "@/components/analyze/AnalysisSections";
 import TickerSearch from "@/components/search/TickerSearch";
+import { getStockHeadline, resolveStockDisplayName } from "@/lib/stock-display";
 import type { SearchResult, StockAnalysis } from "@/lib/types";
 
 export default function AnalyzePanel() {
@@ -35,7 +36,10 @@ export default function AnalyzePanel() {
   }, []);
 
   const handleSearchSelect = (result: SearchResult) => {
-    setSelected({ ticker: result.ticker, name: result.name });
+    setSelected({
+      ticker: result.ticker,
+      name: resolveStockDisplayName(result.ticker, result.name),
+    });
     setAnalysis(null);
     setError(null);
   };
@@ -92,6 +96,10 @@ export default function AnalyzePanel() {
     }
   };
 
+  const selectedHeadline = selected
+    ? getStockHeadline(selected.ticker, selected.name)
+    : null;
+
   return (
     <div className="space-y-6">
       <div className="rounded-xl border border-surface-border bg-surface-card p-5 card-glow">
@@ -114,12 +122,16 @@ export default function AnalyzePanel() {
           <p className="text-[11px] uppercase tracking-wide text-gray-400">
             선택된 종목
           </p>
-          {selected ? (
+          {selectedHeadline ? (
             <>
-              <p className="font-mono text-lg font-bold text-accent">
-                {selected.ticker}
+              <p className="text-lg font-bold text-accent">
+                {selectedHeadline.primary}
               </p>
-              <p className="text-sm text-gray-300">{selected.name}</p>
+              {selectedHeadline.secondary ? (
+                <p className="text-sm text-gray-300">
+                  {selectedHeadline.secondary}
+                </p>
+              ) : null}
             </>
           ) : (
             <p className="text-sm text-gray-400">종목을 선택해주세요</p>
@@ -154,20 +166,23 @@ export default function AnalyzePanel() {
           <div className="mb-4">
             <p className="mb-2 text-xs text-gray-400">관심종목 빠른 선택</p>
             <div className="flex flex-wrap gap-2">
-              {watchlist.map((item) => (
-                <button
-                  key={item.ticker}
-                  type="button"
-                  onClick={() => handleChipSelect(item.ticker, item.name)}
-                  className={`rounded-lg border px-4 py-2 font-mono text-sm font-semibold transition-colors ${
-                    selected?.ticker === item.ticker
-                      ? "border-accent/40 bg-accent/15 text-accent"
-                      : "border-surface-border text-gray-400 hover:text-white hover:border-surface-border/80"
-                  }`}
-                >
-                  {item.ticker}
-                </button>
-              ))}
+              {watchlist.map((item) => {
+                const label = getStockHeadline(item.ticker, item.name).primary;
+                return (
+                  <button
+                    key={item.ticker}
+                    type="button"
+                    onClick={() => handleChipSelect(item.ticker, item.name)}
+                    className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
+                      selected?.ticker === item.ticker
+                        ? "border-accent/40 bg-accent/15 text-accent"
+                        : "border-surface-border text-gray-400 hover:text-white hover:border-surface-border/80"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}

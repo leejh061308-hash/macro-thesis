@@ -1,4 +1,5 @@
 import AiDisclaimer from "@/components/layout/AiDisclaimer";
+import { getStockHeadline } from "@/lib/stock-display";
 import type { StockAnalysis } from "@/lib/types";
 
 interface AnalysisSectionsProps {
@@ -30,16 +31,20 @@ function Section({
 export default function AnalysisSections({ analysis }: AnalysisSectionsProps) {
   const hasOpinionReview =
     analysis.userOpinionReview && analysis.userOpinionReview.length > 0;
+  const { primary, secondary } = getStockHeadline(
+    analysis.ticker,
+    analysis.name
+  );
 
   let sectionNum = 1;
 
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-accent/20 bg-accent/5 px-4 py-3">
-        <p className="font-mono text-lg font-bold text-white">
-          {analysis.ticker}
-        </p>
-        <p className="text-sm text-neutral">{analysis.name}</p>
+        <p className="text-lg font-bold text-white">{primary}</p>
+        {secondary ? (
+          <p className="text-sm text-neutral">{secondary}</p>
+        ) : null}
       </div>
 
       <Section title="기업 요약" number={sectionNum++}>

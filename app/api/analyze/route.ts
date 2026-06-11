@@ -9,6 +9,9 @@ import {
   ANALYSIS_SYSTEM_PROMPT,
   buildAnalysisPrompt,
 } from "@/lib/prompts/analysis";
+import { resolveStockDisplayName } from "@/lib/stock-display";
+import { normalizeTicker } from "@/lib/tickers";
+import { listWatchlistSafe } from "@/lib/watchlist-db";
 import { fetchQuote } from "@/lib/yahoo";
 import type { StockAnalysis } from "@/lib/types";
 
@@ -60,7 +63,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const ticker = body.ticker?.trim().toUpperCase();
+    const ticker = normalizeTicker(body.ticker?.trim() ?? "");
     const investmentOpinion =
       typeof body.investmentOpinion === "string"
         ? body.investmentOpinion.trim()
@@ -73,8 +76,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const quote = await fetchQuote(ticker);
-    const name = quote?.name ?? ticker;
+    const [quote, watchlist] = await Promise.all([
+      fetchQuote(ticker),
+      listWatchlistSafe(),
+    ]);
+    const watchlistName = watchlist.find((item) => item.ticker === ticker)?.name;
+    const name = resolveStockDisplayName(
+      ticker,
+      watchlistName ?? quote?.name ?? ticker
+    );
 
     const openai = getOpenAIClient();
     const completion = await openai.chat.completions.create(
