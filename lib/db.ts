@@ -261,6 +261,14 @@ export function updateOfficialNewsAnalysis(id: number, aiAnalysis: string) {
     .run(aiAnalysis, id);
 }
 
+export function deleteOfficialNews(id: number): boolean {
+  const database = getDb();
+  const result = database
+    .prepare("DELETE FROM official_news WHERE id = ?")
+    .run(id);
+  return result.changes > 0;
+}
+
 export function getOfficialNewsPendingAnalysis(): OfficialNewsRow[] {
   const database = getDb();
   return database

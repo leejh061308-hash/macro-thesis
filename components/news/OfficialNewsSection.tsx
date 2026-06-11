@@ -20,6 +20,8 @@ export default function OfficialNewsSection() {
   const [unlockInput, setUnlockInput] = useState("");
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
   const tapCountRef = useRef(0);
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -184,6 +186,41 @@ export default function OfficialNewsSection() {
     }
   };
 
+  const handleDelete = async (id: number) => {
+    if (!adminKey) return;
+    if (!window.confirm("이 메인 뉴스를 삭제할까요?")) return;
+
+    setDeletingId(id);
+    setActionMessage(null);
+
+    try {
+      const res = await fetch(`/api/official-news?id=${id}`, {
+        method: "DELETE",
+        headers: authHeaders(adminKey),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "메인 뉴스 삭제에 실패했습니다.");
+      }
+
+      setPosts((prev) => prev.filter((item) => item.id !== id));
+      setActionMessage("메인 뉴스를 삭제했습니다.");
+    } catch (err) {
+      setActionMessage(
+        err instanceof Error ? err.message : "메인 뉴스 삭제에 실패했습니다."
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!actionMessage) return;
+    const timer = setTimeout(() => setActionMessage(null), 3000);
+    return () => clearTimeout(timer);
+  }, [actionMessage]);
+
   return (
     <section className="space-y-3">
       <div>
@@ -227,6 +264,12 @@ export default function OfficialNewsSection() {
         />
       )}
 
+      {actionMessage && (
+        <div className="rounded-lg border border-accent/30 bg-accent/10 px-4 py-2.5 text-sm text-accent">
+          {actionMessage}
+        </div>
+      )}
+
       {isLoading && (
         <div className="h-32 animate-pulse rounded-xl border border-accent/20 bg-accent/5" />
       )}
@@ -238,7 +281,15 @@ export default function OfficialNewsSection() {
       )}
 
       {!isLoading &&
-        posts.map((item) => <OfficialNewsCard key={item.id} item={item} />)}
+        posts.map((item) => (
+          <OfficialNewsCard
+            key={item.id}
+            item={item}
+            canDelete={canWrite}
+            onDelete={handleDelete}
+            isDeleting={deletingId === item.id}
+          />
+        ))}
     </section>
   );
 }
