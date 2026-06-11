@@ -3,12 +3,13 @@ import { createArticleId } from "@/lib/hash";
 export interface RawNewsItem {
   id: string;
   title: string;
+  description: string;
   publishedAt: string;
   url: string;
   source: string;
 }
 
-/** 헤드라인·링크·발행시각만 사용 (기사 본문 미수집) */
+/** 헤드라인·요약·링크·발행시각만 사용 (기사 본문 미수집) */
 const RSS_FEEDS = [
   {
     source: "The Guardian",
@@ -58,15 +59,44 @@ const RSS_FEEDS = [
     source: "MarketWatch",
     url: "https://www.marketwatch.com/rss/topstories",
   },
+  {
+    source: "한국경제",
+    url: "https://www.hankyung.com/feed/finance",
+  },
+  {
+    source: "이데일리",
+    url: "http://rss.edaily.co.kr/stock_news.xml",
+  },
+  {
+    source: "머니투데이",
+    url: "http://rss.mt.co.kr/mt_news_stock.xml",
+  },
+  {
+    source: "매일경제",
+    url: "https://www.mk.co.kr/rss/50200011/",
+  },
 ] as const;
 
 const USER_AGENT =
   "Mozilla/5.0 (compatible; MacroLens/1.0; Investment Research)";
 
-const MAX_NEWS_POOL = 96;
+const MAX_NEWS_POOL = 160;
+const BROKER_PRIORITY_SOURCES = new Set([
+  "한국경제",
+  "이데일리",
+  "머니투데이",
+  "매일경제",
+]);
+const BROKER_PRIORITY_PER_SOURCE = 25;
 const RSS_CACHE_MS = 120_000;
 
-let newsCache: { data: RawNewsItem[]; fetchedAt: number } | null = null;
+interface NewsCache {
+  pool: RawNewsItem[];
+  all: RawNewsItem[];
+  fetchedAt: number;
+}
+
+let newsCache: NewsCache | null = null;
 
 function extractTag(content: string, tag: string): string {
   const cdata = content.match(
@@ -76,6 +106,28 @@ function extractTag(content: string, tag: string): string {
 
   const plain = content.match(new RegExp(`<${tag}>(.*?)<\\/${tag}>`, "s"));
   return plain?.[1]?.trim() ?? "";
+}
+
+function stripHtml(text: string): string {
+  return text
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gi, "$1")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractDescription(item: string): string {
+  const description =
+    extractTag(item, "description") ||
+    extractTag(item, "content:encoded") ||
+    extractTag(item, "summary");
+
+  return stripHtml(description);
 }
 
 function parseRssItems(xml: string, source: string): RawNewsItem[] {
@@ -90,12 +142,14 @@ function parseRssItems(xml: string, source: string): RawNewsItem[] {
         "";
       const pubDate = extractTag(item, "pubDate");
       const itemSource = extractTag(item, "source") || source;
+      const description = extractDescription(item);
 
       if (!title || !link) return null;
 
       return {
         id: createArticleId(link),
         title,
+        description,
         publishedAt: pubDate
           ? new Date(pubDate).toISOString()
           : new Date().toISOString(),
@@ -121,6 +175,10 @@ async function fetchFeed(
   }
 
   const xml = await response.text();
+  if (!xml.includes("<item") && !xml.includes("<entry")) {
+    throw new Error(`${source} RSS returned non-feed content`);
+  }
+
   return parseRssItems(xml, source);
 }
 
@@ -140,7 +198,33 @@ function dedupeAndSort(items: RawNewsItem[]): RawNewsItem[] {
   );
 }
 
-async function fetchFreshNews(): Promise<RawNewsItem[]> {
+function trimNewsPool(items: RawNewsItem[]): RawNewsItem[] {
+  const sorted = dedupeAndSort(items);
+  const priority: RawNewsItem[] = [];
+  const priorityUrls = new Set<string>();
+
+  for (const source of BROKER_PRIORITY_SOURCES) {
+    for (const item of sorted.filter((entry) => entry.source === source)) {
+      if (priorityUrls.has(item.url)) continue;
+      if (
+        priority.filter((entry) => entry.source === source).length >=
+        BROKER_PRIORITY_PER_SOURCE
+      ) {
+        break;
+      }
+      priorityUrls.add(item.url);
+      priority.push(item);
+    }
+  }
+
+  const general = sorted
+    .filter((item) => !priorityUrls.has(item.url))
+    .slice(0, MAX_NEWS_POOL - priority.length);
+
+  return dedupeAndSort([...priority, ...general]).slice(0, MAX_NEWS_POOL);
+}
+
+async function fetchFreshNews(): Promise<NewsCache> {
   const results = await Promise.allSettled(
     RSS_FEEDS.map((feed) => fetchFeed(feed.url, feed.source))
   );
@@ -156,22 +240,42 @@ async function fetchFreshNews(): Promise<RawNewsItem[]> {
     throw new Error("All RSS feeds failed");
   }
 
-  return dedupeAndSort(allItems).slice(0, MAX_NEWS_POOL);
+  const all = dedupeAndSort(allItems);
+  return {
+    pool: trimNewsPool(all),
+    all,
+    fetchedAt: Date.now(),
+  };
 }
 
-export async function fetchMarketNews(options?: {
+async function getNewsCache(options?: {
   bypassCache?: boolean;
-}): Promise<RawNewsItem[]> {
+}): Promise<NewsCache> {
   const now = Date.now();
   if (
     !options?.bypassCache &&
     newsCache &&
     now - newsCache.fetchedAt < RSS_CACHE_MS
   ) {
-    return newsCache.data;
+    return newsCache;
   }
 
-  const data = await fetchFreshNews();
-  newsCache = { data, fetchedAt: now };
-  return data;
+  newsCache = await fetchFreshNews();
+  return newsCache;
+}
+
+/** UI·일반 뉴스용으로 다듬은 풀 */
+export async function fetchMarketNews(options?: {
+  bypassCache?: boolean;
+}): Promise<RawNewsItem[]> {
+  const cache = await getNewsCache(options);
+  return cache.pool;
+}
+
+/** 증권사 리포트 분류용 전체 RSS 수집 결과 */
+export async function fetchAllMarketNews(options?: {
+  bypassCache?: boolean;
+}): Promise<RawNewsItem[]> {
+  const cache = await getNewsCache(options);
+  return cache.all;
 }

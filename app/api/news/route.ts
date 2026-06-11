@@ -4,7 +4,7 @@ import { getCachedSummary } from "@/lib/db";
 import { createTitleHash } from "@/lib/hash";
 import { parseNewsSummary } from "@/lib/news-summary";
 import { NEWS_SUMMARY_PROMPT_VERSION } from "@/lib/prompts/news";
-import { fetchMarketNews } from "@/lib/rss";
+import { fetchAllMarketNews, fetchMarketNews } from "@/lib/rss";
 import type { NewsItem } from "@/lib/types";
 
 function newsTitleHash(title: string): string {
@@ -36,8 +36,15 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   try {
     const bypassCache = request.nextUrl.searchParams.get("fresh") === "1";
-    const rawNews = await fetchMarketNews({ bypassCache });
-    const { news, brokerReports } = categorizeMarketNews(rawNews);
+    const [rawNews, allNews] = await Promise.all([
+      fetchMarketNews({ bypassCache }),
+      fetchAllMarketNews({ bypassCache }),
+    ]);
+    const { brokerReports } = categorizeMarketNews(allNews);
+    const brokerIds = new Set(brokerReports.map((item) => item.id));
+    const { news } = categorizeMarketNews(
+      rawNews.filter((item) => !brokerIds.has(item.id))
+    );
 
     return NextResponse.json(
       {
