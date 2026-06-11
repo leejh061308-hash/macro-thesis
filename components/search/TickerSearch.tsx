@@ -11,7 +11,7 @@ interface TickerSearchProps {
 }
 
 export default function TickerSearch({
-  placeholder = "티커 검색 (AAPL, ^IXIC, NVDA...)",
+  placeholder = "티커 검색 (AAPL, 005930, ^KS11...)",
   onSelect,
   showWatchlistAction = false,
   onAddWatchlist,
@@ -109,6 +109,7 @@ export default function TickerSearch({
                 </span>
                 <p className="text-xs text-gray-400 truncate max-w-[200px]">
                   {result.name}
+                  {result.exchange ? ` · ${result.exchange}` : ""}
                 </p>
               </button>
               {showWatchlistAction && onAddWatchlist && (

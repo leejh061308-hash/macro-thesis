@@ -1,9 +1,10 @@
 export function formatPrice(price: number, currency = "USD"): string {
-  return new Intl.NumberFormat("en-US", {
+  const isKrw = currency === "KRW";
+  return new Intl.NumberFormat(isKrw ? "ko-KR" : "en-US", {
     style: "currency",
     currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: isKrw ? 0 : 2,
+    maximumFractionDigits: isKrw ? 0 : 2,
   }).format(price);
 }
 

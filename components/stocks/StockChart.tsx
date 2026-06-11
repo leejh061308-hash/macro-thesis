@@ -9,8 +9,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { formatPrice } from "@/lib/format";
 import { formatChartYAxis } from "@/lib/market-quote";
-import { normalizeTicker } from "@/lib/tickers";
+import { inferCurrency, normalizeTicker } from "@/lib/tickers";
 import type { ChartDataPoint, ChartPeriod } from "@/lib/types";
 
 const PERIODS: { value: ChartPeriod; label: string }[] = [
@@ -26,6 +27,7 @@ interface StockChartProps {
 
 export default function StockChart({ ticker: rawTicker }: StockChartProps) {
   const ticker = normalizeTicker(rawTicker);
+  const currency = inferCurrency(ticker);
   const gradientId = useId().replace(/:/g, "");
   const [period, setPeriod] = useState<ChartPeriod>("1m");
   const [data, setData] = useState<ChartDataPoint[]>([]);
@@ -125,7 +127,7 @@ export default function StockChart({ ticker: rawTicker }: StockChartProps) {
                 labelStyle={{ color: "#8b949e" }}
                 itemStyle={{ color: "#f0b429" }}
                 formatter={(value) => [
-                  `$${Number(value ?? 0).toFixed(2)}`,
+                  formatPrice(Number(value ?? 0), currency),
                   "종가",
                 ]}
               />

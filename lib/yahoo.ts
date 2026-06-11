@@ -1,6 +1,13 @@
 import YahooFinance from "yahoo-finance2";
 import { resolveMarketQuote, type YahooQuoteLike } from "@/lib/market-quote";
-import { isIndexTicker } from "@/lib/tickers";
+import { searchKoreanStockAliases } from "@/lib/korean-stocks";
+import {
+  formatExchangeLabel,
+  isIndexTicker,
+  isKoreanEquityTicker,
+  isKoreanMarketTicker,
+  normalizeTicker,
+} from "@/lib/tickers";
 import { withTimeout } from "@/lib/timeout";
 import {
   getCachedQuotes,
@@ -154,17 +161,23 @@ async function fetchQuoteFromLibrary(
   }
 }
 
+async function fetchYahooQuote(ticker: string): Promise<StockQuote | null> {
+  const direct = await fetchDirectQuote(ticker);
+  if (direct) return direct;
+  return fetchQuoteFromLibrary(ticker);
+}
+
 export async function fetchQuote(ticker: string): Promise<StockQuote | null> {
-  if (isFinnhubConfigured()) {
-    const finnhubQuotes = await fetchFinnhubQuotes([ticker], {
-      [ticker]: ticker,
+  const normalized = normalizeTicker(ticker);
+
+  if (isFinnhubConfigured() && !isKoreanMarketTicker(normalized)) {
+    const finnhubQuotes = await fetchFinnhubQuotes([normalized], {
+      [normalized]: normalized,
     });
     if (finnhubQuotes[0]) return finnhubQuotes[0];
   }
 
-  const direct = await fetchDirectQuote(ticker);
-  if (direct) return direct;
-  return fetchQuoteFromLibrary(ticker);
+  return fetchYahooQuote(normalized);
 }
 
 export async function fetchQuotes(
@@ -180,14 +193,19 @@ export async function fetchQuotes(
 
   let fresh: StockQuote[] = [];
   if (staleTickers.length > 0 && Date.now() < deadline) {
-    if (isFinnhubConfigured()) {
-      fresh = await fetchFinnhubQuotes(staleTickers, names);
-    } else {
-      fresh = await fetchDirectQuotes(staleTickers);
+    const finnhubTickers = isFinnhubConfigured()
+      ? staleTickers.filter((ticker) => !isKoreanMarketTicker(ticker))
+      : [];
+    const yahooTickers = staleTickers.filter(
+      (ticker) => !finnhubTickers.includes(ticker)
+    );
+
+    if (finnhubTickers.length > 0) {
+      fresh = await fetchFinnhubQuotes(finnhubTickers, names);
     }
 
     const freshMap = new Map(fresh.map((quote) => [quote.ticker, quote]));
-    let stillMissing = staleTickers.filter((ticker) => !freshMap.has(ticker));
+    let stillMissing = yahooTickers.filter((ticker) => !freshMap.has(ticker));
 
     if (stillMissing.length > 0 && Date.now() < deadline) {
       const yahooQuotes = await fetchDirectQuotes(stillMissing);
@@ -356,7 +374,7 @@ export async function fetchStockDetail(
     console.error(`[yahoo] stock detail failed for ${ticker}:`, error);
   }
 
-  if (isFinnhubConfigured()) {
+  if (isFinnhubConfigured() && !isKoreanMarketTicker(ticker)) {
     const finnhubDetail = await fetchFinnhubStockDetail(ticker);
     if (finnhubDetail) return finnhubDetail;
   }
@@ -410,38 +428,130 @@ export async function fetchChartData(
   return fetchChartDataFromLibrary(ticker, period);
 }
 
-export async function searchTickers(query: string): Promise<SearchResult[]> {
-  if (!query.trim()) return [];
+function isKoreanSearchQuery(query: string): boolean {
+  return /[\u3131-\uD79D]/.test(query) || /^\d{6}$/.test(query.trim());
+}
 
-  try {
-    const result = await withTimeout(
-      yahooFinance.search(query, {
-        quotesCount: 8,
-        newsCount: 0,
-      }),
-      SEARCH_TIMEOUT,
-      "search"
-    );
+function rankSearchResults(
+  results: SearchResult[],
+  query: string
+): SearchResult[] {
+  const preferKorean = isKoreanSearchQuery(query);
 
-    const quotes = (result.quotes ?? []) as Array<{
-      symbol?: string;
-      shortname?: string;
-      longname?: string;
-      exchange?: string;
-    }>;
+  return [...results].sort((a, b) => {
+    const aKorean = isKoreanEquityTicker(a.ticker);
+    const bKorean = isKoreanEquityTicker(b.ticker);
+    if (preferKorean && aKorean !== bKorean) {
+      return aKorean ? -1 : 1;
+    }
+    return 0;
+  });
+}
 
-    const results = quotes
-      .filter((q) => typeof q.symbol === "string")
-      .map((q) => ({
-        ticker: q.symbol as string,
-        name: q.shortname || q.longname || (q.symbol as string),
-        exchange: q.exchange ?? "",
-      }));
+function dedupeSearchResults(results: SearchResult[]): SearchResult[] {
+  const seen = new Set<string>();
+  const unique: SearchResult[] = [];
 
-    if (results.length > 0) return results;
-  } catch (error) {
-    console.error("[yahoo] search failed:", error);
+  for (const result of results) {
+    if (seen.has(result.ticker)) continue;
+    seen.add(result.ticker);
+    unique.push(result);
   }
 
-  return searchFinnhubTickers(query);
+  return unique;
+}
+
+async function resolveKoreanTickerCandidates(
+  code: string
+): Promise<SearchResult[]> {
+  const results: SearchResult[] = [];
+
+  for (const suffix of ["KS", "KQ"] as const) {
+    const ticker = `${code}.${suffix}`;
+    const quote = await fetchYahooQuote(ticker);
+    if (!quote) continue;
+
+    results.push({
+      ticker: quote.ticker,
+      name: quote.name,
+      exchange: suffix === "KS" ? "KOSPI" : "KOSDAQ",
+    });
+  }
+
+  return results;
+}
+
+export async function searchTickers(query: string): Promise<SearchResult[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const normalized = normalizeTicker(trimmed);
+  let results: SearchResult[] = [];
+
+  if (isKoreanSearchQuery(trimmed)) {
+    results.push(...searchKoreanStockAliases(trimmed));
+  }
+
+  if (/^\d{6}$/.test(trimmed)) {
+    results.push(...(await resolveKoreanTickerCandidates(trimmed)));
+  } else if (isKoreanEquityTicker(normalized)) {
+    const quote = await fetchYahooQuote(normalized);
+    if (quote) {
+      results.push({
+        ticker: quote.ticker,
+        name: quote.name,
+        exchange: normalized.endsWith(".KQ") ? "KOSDAQ" : "KOSPI",
+      });
+    }
+  }
+
+  if (!/[\u3131-\uD79D]/.test(trimmed)) {
+    try {
+      const result = await withTimeout(
+        yahooFinance.search(trimmed, {
+          quotesCount: 12,
+          newsCount: 0,
+        }),
+        SEARCH_TIMEOUT,
+        "search"
+      );
+
+      const quotes = (result.quotes ?? []) as Array<{
+        symbol?: string;
+        shortname?: string;
+        longname?: string;
+        exchange?: string;
+      }>;
+
+      results.push(
+        ...quotes
+          .filter((q) => typeof q.symbol === "string")
+          .map((q) => ({
+            ticker: q.symbol as string,
+            name: q.shortname || q.longname || (q.symbol as string),
+            exchange:
+              formatExchangeLabel(q.exchange ?? "") || (q.exchange ?? ""),
+          }))
+      );
+    } catch (error) {
+      console.error("[yahoo] search failed:", error);
+    }
+  }
+
+  if (/^\d{6}$/.test(trimmed)) {
+    results = results.filter(
+      (result) =>
+        isKoreanEquityTicker(result.ticker) || result.ticker.startsWith("^")
+    );
+  }
+
+  results = dedupeSearchResults(rankSearchResults(results, trimmed)).slice(0, 8);
+
+  if (results.length > 0) return results;
+
+  if (!isKoreanSearchQuery(trimmed)) {
+    return searchFinnhubTickers(trimmed);
+  }
+
+  return [];
 }

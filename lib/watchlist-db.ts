@@ -4,6 +4,11 @@ import type { WatchlistItem } from "@/lib/types";
 export const DEFAULT_WATCHLIST: Array<{ ticker: string; name: string }> = [
   { ticker: "^IXIC", name: "나스닥 종합" },
   { ticker: "^KS11", name: "코스피" },
+  { ticker: "^KQ11", name: "코스닥" },
+  { ticker: "005930.KS", name: "삼성전자" },
+  { ticker: "000660.KS", name: "SK하이닉스" },
+  { ticker: "035420.KS", name: "NAVER" },
+  { ticker: "005380.KS", name: "현대차" },
   { ticker: "AAPL", name: "Apple" },
   { ticker: "MSFT", name: "Microsoft" },
   { ticker: "GOOGL", name: "Alphabet" },
@@ -12,6 +17,13 @@ export const DEFAULT_WATCHLIST: Array<{ ticker: string; name: string }> = [
   { ticker: "META", name: "Meta" },
   { ticker: "TSLA", name: "Tesla" },
 ];
+
+const KOREAN_WATCHLIST_SEEDS = DEFAULT_WATCHLIST.filter(
+  (item) =>
+    item.ticker.endsWith(".KS") ||
+    item.ticker.endsWith(".KQ") ||
+    item.ticker === "^KQ11"
+);
 
 let schemaReady: Promise<void> | null = null;
 
@@ -46,15 +58,43 @@ export async function ensureWatchlistSchema(): Promise<void> {
   await schemaReady;
 }
 
-async function seedDefaultWatchlist(): Promise<void> {
+async function seedWatchlistItems(
+  items: Array<{ ticker: string; name: string }>,
+  startOrder = 0
+): Promise<void> {
   const pool = getPool();
-  for (const [index, item] of DEFAULT_WATCHLIST.entries()) {
+  for (const [offset, item] of items.entries()) {
     await pool.query(
       `INSERT INTO watchlist (ticker, name, sort_order)
        VALUES ($1, $2, $3)
        ON CONFLICT (ticker) DO NOTHING`,
-      [item.ticker, item.name, index]
+      [item.ticker, item.name, startOrder + offset]
     );
+  }
+}
+
+async function seedDefaultWatchlist(): Promise<void> {
+  await seedWatchlistItems(DEFAULT_WATCHLIST);
+}
+
+async function ensureKoreanWatchlistSeeds(): Promise<void> {
+  const pool = getPool();
+  const maxResult = await pool.query(
+    `SELECT COALESCE(MAX(sort_order), -1) AS max_order FROM watchlist`
+  );
+  let nextOrder = Number(maxResult.rows[0]?.max_order ?? -1) + 1;
+
+  for (const item of KOREAN_WATCHLIST_SEEDS) {
+    const result = await pool.query(
+      `INSERT INTO watchlist (ticker, name, sort_order)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (ticker) DO NOTHING
+       RETURNING id`,
+      [item.ticker, item.name, nextOrder]
+    );
+    if ((result.rowCount ?? 0) > 0) {
+      nextOrder += 1;
+    }
   }
 }
 
@@ -70,6 +110,13 @@ export async function listWatchlist(): Promise<WatchlistItem[]> {
 
   if (result.rows.length === 0) {
     await seedDefaultWatchlist();
+    result = await pool.query(
+      `SELECT ticker, name, sort_order
+       FROM watchlist
+       ORDER BY sort_order ASC, id ASC`
+    );
+  } else {
+    await ensureKoreanWatchlistSeeds();
     result = await pool.query(
       `SELECT ticker, name, sort_order
        FROM watchlist

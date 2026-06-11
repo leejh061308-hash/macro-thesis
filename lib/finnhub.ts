@@ -1,3 +1,4 @@
+import { isKoreanMarketTicker } from "@/lib/tickers";
 import { withTimeout } from "@/lib/timeout";
 import type { SearchResult, StockDetail, StockQuote } from "@/lib/types";
 
@@ -28,6 +29,7 @@ async function finnhubGet<T>(path: string, label: string): Promise<T | null> {
 }
 
 function finnhubSymbol(ticker: string): string | null {
+  if (isKoreanMarketTicker(ticker)) return null;
   if (ticker.startsWith("^")) return ticker;
   return ticker;
 }

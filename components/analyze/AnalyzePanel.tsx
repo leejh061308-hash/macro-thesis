@@ -105,7 +105,7 @@ export default function AnalyzePanel() {
             종목 검색
           </label>
           <TickerSearch
-            placeholder="분석할 티커 검색 (AAPL, NVDA, MSFT...)"
+            placeholder="분석할 티커 검색 (AAPL, 005930, ^KS11...)"
             onSelect={handleSearchSelect}
           />
         </div>
