@@ -2,6 +2,11 @@ import YahooFinance from "yahoo-finance2";
 import { resolveMarketQuote, type YahooQuoteLike } from "@/lib/market-quote";
 import { isIndexTicker } from "@/lib/tickers";
 import { withTimeout } from "@/lib/timeout";
+import {
+  fetchDirectChartData,
+  fetchDirectQuote,
+  fetchDirectQuotes,
+} from "@/lib/yahoo-direct";
 import type {
   ChartDataPoint,
   ChartPeriod,
@@ -12,6 +17,13 @@ import type {
 
 const yahooFinance = new YahooFinance({
   suppressNotices: ["yahooSurvey"],
+  queue: { concurrency: 2, interval: 250 },
+  fetchOptions: {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    },
+  },
 });
 
 const QUOTE_FIELDS = [
@@ -88,7 +100,9 @@ function formatChartLabel(date: Date, period: ChartPeriod): string {
   });
 }
 
-export async function fetchQuote(ticker: string): Promise<StockQuote | null> {
+async function fetchQuoteFromLibrary(
+  ticker: string
+): Promise<StockQuote | null> {
   try {
     const result = await withTimeout(
       yahooFinance.quote(ticker, { fields: [...QUOTE_FIELDS] }),
@@ -107,13 +121,35 @@ export async function fetchQuote(ticker: string): Promise<StockQuote | null> {
       currency: result.currency ?? "USD",
       session: resolved.session,
     };
-  } catch {
+  } catch (error) {
+    console.error(`[yahoo] library quote failed for ${ticker}:`, error);
     return null;
   }
 }
 
+export async function fetchQuote(ticker: string): Promise<StockQuote | null> {
+  const direct = await fetchDirectQuote(ticker);
+  if (direct) return direct;
+  return fetchQuoteFromLibrary(ticker);
+}
+
 export async function fetchQuotes(tickers: string[]): Promise<StockQuote[]> {
-  const results = await Promise.all(tickers.map((t) => fetchQuote(t)));
+  const direct = await fetchDirectQuotes(tickers);
+  if (direct.length > 0) {
+    const directMap = new Map(direct.map((q) => [q.ticker, q]));
+    const missing = tickers.filter((t) => !directMap.has(t));
+    if (missing.length === 0) return direct;
+
+    const fallback = await Promise.all(
+      missing.map((t) => fetchQuoteFromLibrary(t))
+    );
+    return [
+      ...direct,
+      ...fallback.filter((q): q is StockQuote => q !== null),
+    ];
+  }
+
+  const results = await Promise.all(tickers.map((t) => fetchQuoteFromLibrary(t)));
   return results.filter((q): q is StockQuote => q !== null);
 }
 
@@ -234,7 +270,7 @@ export async function fetchStockDetail(
   }
 }
 
-export async function fetchChartData(
+async function fetchChartDataFromLibrary(
   ticker: string,
   period: ChartPeriod
 ): Promise<ChartDataPoint[]> {
@@ -257,9 +293,22 @@ export async function fetchChartData(
         close: point.close as number,
         label: formatChartLabel(point.date, period),
       }));
-  } catch {
+  } catch (error) {
+    console.error(
+      `[yahoo] library chart failed for ${ticker} (${period}):`,
+      error
+    );
     return [];
   }
+}
+
+export async function fetchChartData(
+  ticker: string,
+  period: ChartPeriod
+): Promise<ChartDataPoint[]> {
+  const direct = await fetchDirectChartData(ticker, period);
+  if (direct.length > 0) return direct;
+  return fetchChartDataFromLibrary(ticker, period);
 }
 
 export async function searchTickers(query: string): Promise<SearchResult[]> {
