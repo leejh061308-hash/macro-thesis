@@ -2,6 +2,7 @@ import { getCached, setCached } from "@/lib/quant/cache";
 import { getUniverseMetrics } from "@/lib/quant/service";
 import type { QuantMetrics } from "@/lib/quant/types";
 import { computeCompanyScore } from "@/lib/timing/company-score";
+import { getStrategyPool, isThemeStrategy } from "@/lib/quant/sectors";
 import { filterMetricsPass, runScreenerEngine } from "./engine";
 import { buildScreenerStock, fetchRawMetric } from "./metrics";
 import { resolveTickerPool } from "./themes";
@@ -79,7 +80,7 @@ export async function runAdvancedScreener(
     return { results: [], count: 0, appliedSummary: ["데이터 없음 — FINNHUB_API_KEY 확인"] };
   }
 
-  const cacheKey = `screener-v3:${JSON.stringify(request)}`;
+  const cacheKey = `screener-v4:${JSON.stringify(request)}`;
   const cached = getCached<ScreenerRunResponse>(cacheKey);
   if (cached) return cached;
 
@@ -90,6 +91,21 @@ export async function runAdvancedScreener(
     if (request.advanced && !passesMetricsAdvanced(m, request.advanced)) return false;
     return true;
   });
+
+  const primaryStrategy = request.strategies?.[0];
+  if (primaryStrategy && isThemeStrategy(primaryStrategy)) {
+    const strategyPool = getStrategyPool(primaryStrategy, universe);
+    if (strategyPool.length > 0) {
+      candidates = strategyPool.filter((m) => {
+        if (pool && !pool.has(m.ticker)) return false;
+        if (request.advanced && !passesMetricsAdvanced(m, request.advanced)) return false;
+        return filterMetricsPass(m, universe, request);
+      });
+      if (candidates.length === 0) {
+        candidates = strategyPool;
+      }
+    }
+  }
 
   if (candidates.length === 0 && pool) {
     candidates = universe.filter((m) => pool.has(m.ticker));

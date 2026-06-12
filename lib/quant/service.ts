@@ -156,18 +156,25 @@ export function runScreener(
   });
 
   return filtered
-    .map((m) => ({
-      ticker: m.ticker,
-      name: m.name,
-      score: Math.round(
+    .map((m) => {
+      const score = Math.round(
         (computeStrategyScore("value", m, universe) +
           computeStrategyScore("growth", m, universe) +
           computeStrategyScore("quality-factor", m, universe)) /
           3
-      ),
-      tags: computeStyleTags(m, universe),
-      rank: 0,
-    }))
+      );
+      return {
+        ticker: m.ticker,
+        name: m.name,
+        score,
+        strategyScore: score,
+        companyScore: null,
+        timingScore: null,
+        tags: computeStyleTags(m, universe),
+        reasons: [] as string[],
+        rank: 0,
+      };
+    })
     .sort((a, b) => b.score - a.score)
     .slice(0, 50)
     .map((s, i) => ({ ...s, rank: i + 1 }));

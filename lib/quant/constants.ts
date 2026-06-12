@@ -4,17 +4,17 @@ export const ALL_STRATEGY_IDS: StrategyId[] = [
   "value",
   "growth",
   "dividend",
-  "quality",
-  "low-volatility",
   "quality-factor",
   "momentum",
   "garp",
   "buffett",
   "moat",
-  "defensive",
   "ai-beneficiary",
+  "datacenter",
+  "power-infra",
   "rate-hike",
   "rate-cut",
+  "defensive",
 ];
 
 export const BACKTEST_PERIODS = ["1y", "3y", "5y", "10y"] as const;

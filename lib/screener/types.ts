@@ -3,6 +3,7 @@ import type { StrategyId } from "@/lib/quant/types";
 export type ScreenerMode = "beginner" | "advanced" | "ai";
 
 export type SortField =
+  | "strategyScore"
   | "companyScore"
   | "timingScore"
   | "peRatio"
@@ -153,6 +154,7 @@ export interface ScreenerResult {
   name: string;
   price: number | null;
   currency: string;
+  strategyScore: number | null;
   companyScore: number;
   timingScore: number | null;
   tags: string[];

@@ -35,9 +35,8 @@ interface ScreenerSectionProps {
 type ViewMode = "basic" | "advanced" | "ai";
 
 const CATEGORY_LABELS: Record<StrategyCategory, string> = {
-  core: "기본 전략",
-  factor: "팩터 전략",
-  macro: "거시경제 전략",
+  style: "투자 스타일 전략",
+  theme: "테마 전략",
 };
 
 const THEME_CHIPS: { id: BeginnerTheme; label: string }[] = [
@@ -63,6 +62,7 @@ const EXTRA_MACRO: { id: MacroFilter; label: string }[] = [
 ];
 
 const SORT_OPTIONS: { id: SortField; label: string }[] = [
+  { id: "strategyScore", label: "전략 점수" },
   { id: "companyScore", label: "기업 점수" },
   { id: "timingScore", label: "진입 점수" },
   { id: "peRatio", label: "PER" },
@@ -239,7 +239,7 @@ export default function ScreenerSection({
       beginner: { themes, macro: macroBeginner },
       strategies: selectedStrategyId ? [selectedStrategyId] : undefined,
       macroFilters: basicMacroFilters.length > 0 ? basicMacroFilters : undefined,
-      sort,
+      sort: selectedStrategyId ? "strategyScore" : sort,
       sortDir,
       limit: 40,
     };
@@ -327,7 +327,7 @@ export default function ScreenerSection({
       beginner: { themes, macro: macroBeginner },
       strategies: [selectedStrategyId],
       macroFilters: basicMacroFilters.length > 0 ? basicMacroFilters : undefined,
-      sort,
+      sort: selectedStrategyId ? "strategyScore" : sort,
       sortDir,
       limit: 40,
     });
@@ -372,7 +372,8 @@ export default function ScreenerSection({
     setAdvanced((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const categories: StrategyCategory[] = ["core", "factor", "macro"];
+  const categories: StrategyCategory[] = ["style", "theme"];
+  const selectedStrategy = strategies.find((s) => s.id === selectedStrategyId);
 
   const searchLabel =
     mode === "ai"
@@ -417,6 +418,16 @@ export default function ScreenerSection({
           <p className="text-xs text-gray-400">
             검증된 투자 전략을 선택하고 테마·거시 조건을 추가해 검색하세요.
           </p>
+
+          {selectedStrategy && (
+            <div className="rounded-xl border border-accent/30 bg-accent/10 px-4 py-3">
+              <p className="text-xs font-semibold text-accent">{selectedStrategy.name}</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-gray-300">
+                &ldquo;{selectedStrategy.aiSummary}&rdquo;
+              </p>
+              <p className="mt-1.5 text-[10px] text-neutral">{selectedStrategy.selectionNote}</p>
+            </div>
+          )}
 
           {categories.map((cat) => {
             const group = strategies.filter((s) => s.category === cat);

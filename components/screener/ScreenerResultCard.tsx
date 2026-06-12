@@ -40,7 +40,12 @@ export default function ScreenerResultCard({
           <p className="mt-1 text-xs text-gray-300">{formatPrice(item.price, item.currency)}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <div className="flex gap-1.5">
+          <div className="flex flex-wrap justify-end gap-1">
+            {item.strategyScore != null && (
+              <span className="rounded-md bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent">
+                전략 {item.strategyScore}
+              </span>
+            )}
             <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
               기업 {item.companyScore}
             </span>

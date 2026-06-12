@@ -1,54 +1,30 @@
 import type { MacroFilter } from "./types";
+import {
+  AI_BENEFICIARY_TICKERS,
+  DATACENTER_THEME_TICKERS,
+  DEFENSIVE_TICKERS,
+  POWER_INFRA_THEME_TICKERS,
+  RATE_CUT_TICKERS,
+  RATE_HIKE_TICKERS,
+  SEMICONDUCTOR_TICKERS,
+  CLOUD_TICKERS,
+  CYCLICAL_TICKERS,
+  JPY_STRONG_BENEFICIARY,
+  JPY_WEAK_BENEFICIARY,
+} from "@/lib/quant/sectors";
 
-export const SEMICONDUCTOR_TICKERS = new Set([
-  "NVDA", "AMD", "AVGO", "MU", "LRCX", "KLAC", "INTC", "TXN", "QCOM", "ADI", "SNPS", "CDNS",
-]);
-
-export const DATACENTER_TICKERS = new Set([
-  "EQIX", "AMT", "PLD", "DLR", "AMZN", "MSFT", "GOOGL", "META", "ORCL", "CRM",
-]);
-
-export const POWER_INFRA_TICKERS = new Set([
-  "NEE", "DUK", "SO", "GE", "CAT", "ETN", "VRT", "CEG",
-]);
-
-export const CLOUD_TICKERS = new Set([
-  "MSFT", "AMZN", "GOOGL", "CRM", "NOW", "ORCL", "SNOW", "ADBE", "IBM", "ACN",
-]);
-
-export const CYCLICAL_TICKERS = new Set([
-  "CAT", "DE", "BA", "GE", "XOM", "CVX", "FCX", "NUE", "LMT", "RTX", "HON", "MMM",
-  "GM", "F", "LOW", "HD", "BKNG", "SBUX", "NKE",
-]);
-
-export const JPY_STRONG_BENEFICIARY = new Set([
-  "TM", "HMC", "SONY", "MUFG", "SMFG",
-]);
-
-export const JPY_WEAK_BENEFICIARY = new Set([
-  "PG", "KO", "WMT", "COST", "MCD", "CL", "JNJ", "UNH",
-]);
+export { CYCLICAL_TICKERS } from "@/lib/quant/sectors";
 
 export const MACRO_FILTER_SETS: Record<MacroFilter, Set<string>> = {
-  ai: new Set([
-    "NVDA", "AMD", "AVGO", "MSFT", "GOOGL", "META", "ORCL", "CRM", "NOW", "PANW", "ADBE", "AMZN", "EQIX", "ACN", "IBM",
-  ]),
-  datacenter: DATACENTER_TICKERS,
-  "power-infra": POWER_INFRA_TICKERS,
+  ai: AI_BENEFICIARY_TICKERS,
+  datacenter: DATACENTER_THEME_TICKERS,
+  "power-infra": POWER_INFRA_THEME_TICKERS,
   cloud: CLOUD_TICKERS,
   semiconductor: SEMICONDUCTOR_TICKERS,
-  "rate-hike": new Set([
-    "JPM", "BAC", "GS", "MS", "BLK", "SPGI", "AXP", "C", "WFC", "SCHW", "CB", "BRK-B", "MET", "PRU", "CI",
-  ]),
-  "rate-cut": new Set([
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "AMD", "CRM", "NFLX", "ADBE", "NOW",
-    "PLD", "AMT", "EQIX", "O", "SPG", "PSA",
-  ]),
+  "rate-hike": RATE_HIKE_TICKERS,
+  "rate-cut": RATE_CUT_TICKERS,
   cyclical: CYCLICAL_TICKERS,
-  defensive: new Set([
-    "PG", "KO", "PEP", "CL", "MO", "PM", "WMT", "COST", "MCD", "JNJ", "MRK", "LLY", "PFE", "ABT", "UNH",
-    "SO", "DUK", "NEE", "AMGN", "GILD",
-  ]),
+  defensive: DEFENSIVE_TICKERS,
   "jpy-strong": JPY_STRONG_BENEFICIARY,
   "jpy-weak": JPY_WEAK_BENEFICIARY,
 };
@@ -102,8 +78,8 @@ export function tickersForBeginnerThemes(
   if (themes.length === 0) return null;
   const map = {
     ai: MACRO_FILTER_SETS.ai,
-    datacenter: DATACENTER_TICKERS,
-    "power-infra": POWER_INFRA_TICKERS,
+    datacenter: DATACENTER_THEME_TICKERS,
+    "power-infra": POWER_INFRA_THEME_TICKERS,
     cloud: CLOUD_TICKERS,
     semiconductor: SEMICONDUCTOR_TICKERS,
   };

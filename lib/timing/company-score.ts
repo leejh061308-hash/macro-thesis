@@ -13,7 +13,7 @@ export function computeCompanyScore(
 
   if (scores.length === 0) {
     return Math.round(
-      (computeStrategyScore("quality", metrics, universe) +
+      (computeStrategyScore("quality-factor", metrics, universe) +
         computeStrategyScore("growth", metrics, universe)) /
         2
     );

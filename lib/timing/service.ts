@@ -190,13 +190,11 @@ export async function getStrategyEntryEnvironments(): Promise<
   if (cached) return cached;
 
   const universe = await getUniverseMetrics();
-  const coreStrategies = STRATEGIES.filter((s) =>
-    ["value", "growth", "dividend", "quality", "low-volatility"].includes(s.id)
-  );
+  const styleStrategies = STRATEGIES.filter((s) => s.category === "style");
 
   const results: StrategyEntryEnvironment[] = [];
 
-  for (const strategy of coreStrategies) {
+  for (const strategy of styleStrategies) {
     const ranked = rankByStrategy(strategy.id, universe, 15);
     if (ranked.length === 0) continue;
 

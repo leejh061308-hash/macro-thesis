@@ -10,9 +10,8 @@ import type {
 } from "@/lib/quant/types";
 
 const CATEGORY_LABELS: Record<StrategyCategory, string> = {
-  core: "기본 전략",
-  factor: "팩터 전략",
-  macro: "거시경제 전략",
+  style: "투자 스타일 전략",
+  theme: "테마 전략",
 };
 
 interface StrategySectionProps {
@@ -51,7 +50,7 @@ export default function StrategySection({
       .finally(() => setLoading(false));
   }, [selectedId]);
 
-  const categories: StrategyCategory[] = ["core", "factor", "macro"];
+  const categories: StrategyCategory[] = ["style", "theme"];
 
   return (
     <div className="space-y-4">

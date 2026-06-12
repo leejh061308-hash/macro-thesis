@@ -2,8 +2,14 @@ import type { StrategyId } from "@/lib/quant/types";
 import {
   computeStrategyScore,
   computeStyleTags,
+  getStrategy,
 } from "@/lib/quant/strategies";
-import { DEFENSIVE_TICKERS } from "@/lib/quant/sectors";
+import {
+  getStrategyPool,
+  isThemeStrategy,
+  passesThemeFilter,
+} from "@/lib/quant/sectors";
+import { buildSelectionReasons } from "@/lib/quant/strategy-reasons";
 import { MACRO_FILTER_SETS, tickersForBeginnerThemes, tickersForMacroFilters, CYCLICAL_TICKERS } from "./themes";
 import type {
   AdvancedFilters,
@@ -28,7 +34,7 @@ const STYLE_STRATEGY: Record<BeginnerStyle, StrategyId> = {
   "high-growth": "growth",
   dividend: "dividend",
   quality: "quality-factor",
-  "low-volatility": "low-volatility",
+  "low-volatility": "momentum",
   defensive: "defensive",
   cyclical: "momentum",
 };
@@ -193,6 +199,9 @@ function sortResults(
     if (sort === "companyScore") {
       av = a.companyScore;
       bv = b.companyScore;
+    } else if (sort === "strategyScore") {
+      av = a.strategyScore;
+      bv = b.strategyScore;
     } else if (sort === "timingScore") {
       av = a.timingScore;
       bv = b.timingScore;
@@ -239,7 +248,7 @@ function filterMetricsPass(
 
   if (request.beginner?.styles?.length) {
     const stylePass = request.beginner.styles.some((style) => {
-      if (style === "defensive") return DEFENSIVE_TICKERS.has(m.ticker);
+      if (style === "defensive") return passesThemeFilter("defensive", m.ticker);
       if (style === "cyclical") return CYCLICAL_TICKERS.has(m.ticker);
       const sid = STYLE_STRATEGY[style];
       return computeStrategyScore(sid, m, universe) >= 65;
@@ -248,9 +257,12 @@ function filterMetricsPass(
   }
 
   if (request.strategies?.length) {
-    const stratPass = request.strategies.some(
-      (sid) => computeStrategyScore(sid, m, universe) >= 65
-    );
+    const stratPass = request.strategies.some((sid) => {
+      if (!passesThemeFilter(sid, m.ticker)) return false;
+      const pool = getStrategyPool(sid, universe);
+      if (isThemeStrategy(sid) && pool.length === 0) return false;
+      return computeStrategyScore(sid, m, universe) >= 65;
+    });
     if (!stratPass) return false;
   }
 
@@ -274,7 +286,8 @@ export async function runScreenerEngine(
     );
   }
   if (request.strategies?.length) {
-    appliedSummary.push(`전략 필터 ${request.strategies.length}개 적용`);
+    const names = request.strategies.map((sid) => getStrategy(sid).shortName);
+    appliedSummary.push(`전략: ${names.join(", ")}`);
   }
   if (request.macroFilters?.length) {
     appliedSummary.push(`거시경제 필터 ${request.macroFilters.length}개 적용`);
@@ -294,20 +307,37 @@ export async function runScreenerEngine(
   const limit = request.limit ?? 50;
   const preliminary: ScreenerResult[] = [];
 
+  const primaryStrategyId = request.strategies?.[0] ?? null;
+
   for (const stock of candidates) {
     const m = metricsMap.get(stock.ticker)!;
     const companyScore = computeCompanyScore(m, universe);
     const tags = computeStyleTags(m, universe);
 
-    const strategyScores = new Map<StrategyId, number>();
-    const allStrategies: StrategyId[] = [
-      "value", "growth", "dividend", "quality-factor", "momentum", "garp", "buffett", "moat", "defensive", "ai-beneficiary",
-    ];
-    for (const sid of allStrategies) {
-      strategyScores.set(sid, computeStrategyScore(sid, m, universe));
+    let strategyScore: number | null = null;
+    let reasons: string[] = [];
+
+    if (primaryStrategyId) {
+      if (passesThemeFilter(primaryStrategyId, m.ticker)) {
+        const pool = getStrategyPool(primaryStrategyId, universe);
+        strategyScore = computeStrategyScore(primaryStrategyId, m, universe);
+        reasons = buildSelectionReasons(primaryStrategyId, m, pool, strategyScore);
+      }
+    } else if (request.strategies?.length) {
+      for (const sid of request.strategies) {
+        if (!passesThemeFilter(sid, m.ticker)) continue;
+        const pool = getStrategyPool(sid, universe);
+        const score = computeStrategyScore(sid, m, universe);
+        if (score >= 65) {
+          strategyScore = Math.max(strategyScore ?? 0, score);
+          reasons.push(...buildSelectionReasons(sid, m, pool, score));
+        }
+      }
+      reasons = [...new Set(reasons)].slice(0, 5);
+    } else {
+      reasons = buildReasons(stock, m, universe, request, new Map());
     }
 
-    const reasons = buildReasons(stock, m, universe, request, strategyScores);
     if (reasons.length === 0) reasons.push("선택 조건 충족");
 
     preliminary.push({
@@ -315,6 +345,7 @@ export async function runScreenerEngine(
       name: stock.name,
       price: stock.price,
       currency: stock.currency,
+      strategyScore,
       companyScore,
       timingScore: null,
       tags,
@@ -326,7 +357,11 @@ export async function runScreenerEngine(
   let sorted = sortResults(
     preliminary,
     stockMap,
-    request.sort === "timingScore" ? "companyScore" : (request.sort ?? "companyScore"),
+    request.sort === "timingScore"
+      ? "companyScore"
+      : request.sort === "strategyScore"
+        ? "strategyScore"
+        : (request.sort ?? "companyScore"),
     request.sortDir ?? "desc"
   ).slice(0, limit);
 

@@ -23,9 +23,9 @@ Return ONLY valid JSON with this shape:
     "aboveMa200": boolean,
     "near52WeekLow": boolean
   },
-  "strategies": ["value"|"growth"|"dividend"|"quality-factor"|"momentum"|"garp"|"buffett"|"moat"|"defensive"],
+  "strategies": ["value"|"growth"|"dividend"|"quality-factor"|"momentum"|"garp"|"buffett"|"moat"|"ai-beneficiary"|"datacenter"|"power-infra"|"rate-hike"|"rate-cut"|"defensive"],
   "macroFilters": ["ai"|"datacenter"|"power-infra"|"cloud"|"semiconductor"|"rate-hike"|"rate-cut"|"cyclical"|"defensive"|"jpy-strong"|"jpy-weak"],
-  "sort": "companyScore"|"timingScore"|"peRatio"|"roe"|"dividendYield"|"revenueGrowth"|"epsGrowth"|"marketCap"|"return12m",
+  "sort": "strategyScore"|"companyScore"|"timingScore"|"peRatio"|"roe"|"dividendYield"|"revenueGrowth"|"epsGrowth"|"marketCap"|"return12m",
   "sortDir": "asc"|"desc",
   "limit": number
 }

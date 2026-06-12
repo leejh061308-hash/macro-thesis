@@ -2,8 +2,6 @@ export type StrategyId =
   | "value"
   | "growth"
   | "dividend"
-  | "quality"
-  | "low-volatility"
   | "quality-factor"
   | "momentum"
   | "garp"
@@ -11,18 +9,21 @@ export type StrategyId =
   | "moat"
   | "defensive"
   | "ai-beneficiary"
+  | "datacenter"
+  | "power-infra"
   | "rate-hike"
   | "rate-cut";
 
 export type BacktestPeriod = "1y" | "3y" | "5y" | "10y";
 
-export type StrategyCategory = "core" | "factor" | "macro";
+export type StrategyCategory = "style" | "theme";
 
 export interface StrategyDefinition {
   id: StrategyId;
   name: string;
   shortName: string;
   description: string;
+  aiSummary: string;
   criteria: string[];
   icon: string;
   category: StrategyCategory;
@@ -64,7 +65,11 @@ export interface StrategyResult {
   ticker: string;
   name: string;
   score: number;
+  strategyScore: number;
+  companyScore: number | null;
+  timingScore: number | null;
   tags: string[];
+  reasons: string[];
   rank: number;
 }
 
