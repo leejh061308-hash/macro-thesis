@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["better-sqlite3", "yahoo-finance2", "pg", "undici"],
+  serverExternalPackages: ["yahoo-finance2", "pg", "undici"],
   async headers() {
     return [
       {

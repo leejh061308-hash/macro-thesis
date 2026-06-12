@@ -44,43 +44,6 @@ export interface SearchResult {
   exchange: string;
 }
 
-export interface NewsItem {
-  id: string;
-  title: string;
-  summary: string;
-  marketImpact?: string;
-  summaryPending?: boolean;
-  publishedAt: string;
-  url: string;
-  source: string;
-}
-
-export interface MainNewsItem {
-  id: number;
-  title: string;
-  summary: string;
-  sourceUrl: string | null;
-  publishedAt: string;
-  createdAt: string;
-  aiAnalysis: string;
-  aiAnalysisPending?: boolean;
-}
-
-export interface CreateMainNewsRequest {
-  title: string;
-  summary: string;
-  sourceUrl?: string;
-  publishedAt?: string;
-}
-
-export interface UpdateMainNewsRequest {
-  id: number;
-  title?: string;
-  summary?: string;
-  sourceUrl?: string | null;
-  publishedAt?: string;
-}
-
 export interface StockAnalysis {
   ticker: string;
   name: string;
