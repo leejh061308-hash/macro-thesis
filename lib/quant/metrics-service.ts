@@ -1,4 +1,5 @@
 import { withTimeout } from "@/lib/timeout";
+import { fetchMonthlyPrices } from "./yahoo-history";
 import { UNIVERSE_NAMES } from "./universe";
 import type { QuantMetrics } from "./types";
 
@@ -38,6 +39,12 @@ function pct(v: unknown): number | null {
   return Math.abs(n) > 1 ? n / 100 : n;
 }
 
+function returnPct(v: unknown): number | null {
+  const n = num(v);
+  if (n == null) return null;
+  return Math.abs(n) > 1 ? n / 100 : n;
+}
+
 async function fetchOne(ticker: string): Promise<QuantMetrics | null> {
   const [profile, metrics] = await Promise.all([
     finnhubGet<{ name?: string; marketCapitalization?: number }>(
@@ -52,32 +59,80 @@ async function fetchOne(ticker: string): Promise<QuantMetrics | null> {
   const ev = num(m.enterpriseValue);
   const ebitda = num(m.ebitda);
   const evToEbitda =
-    ev != null && ebitda != null && ebitda > 0 ? ev / ebitda : num(m["currentEv/freeCashFlowAnnual"]);
+    ev != null && ebitda != null && ebitda > 0 ? ev / ebitda : null;
+
+  const marketCap =
+    profile?.marketCapitalization != null
+      ? profile.marketCapitalization * 1_000_000
+      : null;
+
+  const peRatio = num(m.peBasic) ?? num(m.peTTM);
+  const epsGrowth = pct(m.epsGrowthTTMYoy) ?? pct(m.epsGrowth3Y);
+  const pegRaw = num(m.pegRatio);
+  const pegRatio =
+    pegRaw != null && pegRaw > 0
+      ? pegRaw
+      : peRatio != null && epsGrowth != null && epsGrowth > 0
+        ? peRatio / (epsGrowth * 100)
+        : null;
+
+  const fcfPerShare = num(m.freeCashFlowPerShareTTM) ?? num(m.fcfPerShareTTM);
+  const price =
+    num(m["10DayAverageTradingVolume"]) != null
+      ? null
+      : num(m["52WeekHigh"]);
+  const evFcf = num(m.currentEvToFreeCashFlowAnnual);
+  const freeCashFlowYield =
+    fcfPerShare != null && price != null && price > 0
+      ? fcfPerShare / price
+      : evFcf != null && evFcf > 0
+        ? 1 / evFcf
+        : null;
+
+  const return12m = returnPct(m["52WeekPriceReturnDaily"]);
+  const return6m = returnPct(m["26WeekPriceReturnDaily"]);
+  const return3m = returnPct(m["13WeekPriceReturnDaily"]);
+  const relativeStrength = returnPct(m["priceRelativeToS&P50052Week"]);
+
+  const volatility = num(m["52WeekPriceReturnDaily.standardDeviation"]);
+  const earningsStability =
+    volatility != null && volatility > 0 ? 1 / volatility : null;
+  const cashFlowStability =
+    freeCashFlowYield != null && freeCashFlowYield > 0
+      ? freeCashFlowYield
+      : pct(m.operatingMarginTTM);
 
   return {
     ticker,
     name: profile?.name ?? UNIVERSE_NAMES[ticker] ?? ticker,
-    peRatio: num(m.peBasic) ?? num(m.peTTM),
+    peRatio,
     pbRatio: num(m.pbAnnual) ?? num(m.pbQuarterly),
-    evToEbitda: evToEbitda != null && evToEbitda > 0 ? evToEbitda : null,
+    evToEbitda,
     revenueGrowth: pct(m.revenueGrowthTTMYoy) ?? pct(m.revenueGrowth3Y),
-    epsGrowth: pct(m.epsGrowthTTMYoy) ?? pct(m.epsGrowth3Y),
+    epsGrowth,
     operatingMargin: pct(m.operatingMarginTTM) ?? pct(m.operatingMarginAnnual),
+    netMargin: pct(m.netProfitMarginTTM) ?? pct(m.netProfitMarginAnnual),
     dividendYield:
       pct(m.dividendYieldIndicatedAnnual) ?? pct(m.currentDividendYieldTTM),
     dividendGrowth: pct(m.dividendGrowthRate5Y),
     payoutRatio: pct(m.payoutRatioAnnual),
     roe: pct(m.roeTTM) ?? pct(m.roeAnnual),
+    roic: pct(m.roicTTM) ?? pct(m.roicAnnual),
     debtToEquity: num(m["totalDebt/totalEquityAnnual"]),
     beta: num(m.beta),
-    volatility: num(m["52WeekPriceReturnDaily.standardDeviation"]),
+    volatility,
     maxDrawdown: num(m["52WeekPriceReturnDaily.maxDrawdown"])
       ? Math.abs(num(m["52WeekPriceReturnDaily.maxDrawdown"])!)
       : null,
-    marketCap:
-      profile?.marketCapitalization != null
-        ? profile.marketCapitalization * 1_000_000
-        : null,
+    marketCap,
+    pegRatio,
+    freeCashFlowYield,
+    return3m,
+    return6m,
+    return12m,
+    relativeStrength,
+    earningsStability,
+    cashFlowStability,
   };
 }
 
@@ -98,6 +153,51 @@ async function mapConcurrent<T, R>(
     Array.from({ length: Math.min(concurrency, items.length) }, worker)
   );
   return results;
+}
+
+/** Finnhub에 모멘텀 데이터가 없을 때 Yahoo 월간 시세로 보완 */
+export async function enrichMomentumFromPrices(
+  metrics: QuantMetrics[]
+): Promise<void> {
+  const spyPrices = await fetchMonthlyPrices("SPY", "10y");
+  const spyReturn12m = computeTrailingReturn(spyPrices, 12);
+
+  const needsEnrich = metrics.filter(
+    (m) => m.return12m == null || m.relativeStrength == null
+  );
+  if (needsEnrich.length === 0) return;
+
+  let index = 0;
+  const concurrency = 3;
+  async function worker() {
+    while (index < needsEnrich.length) {
+      const i = index++;
+      const m = needsEnrich[i];
+      const prices = await fetchMonthlyPrices(m.ticker, "10y");
+      if (prices.length < 4) continue;
+
+      if (m.return3m == null) m.return3m = computeTrailingReturn(prices, 3);
+      if (m.return6m == null) m.return6m = computeTrailingReturn(prices, 6);
+      if (m.return12m == null) m.return12m = computeTrailingReturn(prices, 12);
+      if (m.relativeStrength == null && m.return12m != null && spyReturn12m != null) {
+        m.relativeStrength = m.return12m - spyReturn12m;
+      }
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, needsEnrich.length) }, worker)
+  );
+}
+
+function computeTrailingReturn(
+  prices: { close: number }[],
+  months: number
+): number | null {
+  if (prices.length <= months) return null;
+  const end = prices[prices.length - 1].close;
+  const start = prices[prices.length - 1 - months].close;
+  if (start <= 0) return null;
+  return (end - start) / start;
 }
 
 export async function fetchUniverseMetrics(

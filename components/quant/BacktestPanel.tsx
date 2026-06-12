@@ -15,7 +15,6 @@ const PERIODS: { value: BacktestPeriod; label: string }[] = [
   { value: "3y", label: "3년" },
   { value: "5y", label: "5년" },
   { value: "10y", label: "10년" },
-  { value: "max", label: "최대" },
 ];
 
 interface BacktestPanelProps {
@@ -64,9 +63,11 @@ export default function BacktestPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          strategyId: backtest.strategyId,
           strategyName: backtest.strategyName,
           periodLabel: backtest.periodLabel,
           stats: backtest.stats,
+          selectionNote: backtest.selectionNote,
         }),
       });
       const data = await res.json();
@@ -90,6 +91,9 @@ export default function BacktestPanel({
             <h3 className="text-base font-bold text-white">{strategy.name}</h3>
           </div>
           <p className="mt-1 text-xs text-gray-400">{strategy.description}</p>
+          <p className="mt-1 text-[10px] text-neutral">
+            {strategy.selectionNote}
+          </p>
         </div>
         <button
           type="button"

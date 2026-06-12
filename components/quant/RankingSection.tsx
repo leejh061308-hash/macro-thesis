@@ -31,7 +31,7 @@ export default function RankingSection({
   return (
     <div className="space-y-4">
       <p className="text-xs text-gray-400">
-        전략별 상위 50종목입니다. 동일 유니버스 내 백분위 점수 기준입니다.
+        전략별 상위 50종목입니다. 동일 선정 기준·백분위 점수를 적용합니다.
       </p>
 
       <div className="flex gap-2 overflow-x-auto pb-1">
@@ -46,7 +46,7 @@ export default function RankingSection({
                 : "text-neutral border border-surface-border"
             }`}
           >
-            {s.shortName} TOP 50
+            {s.shortName}
           </button>
         ))}
       </div>

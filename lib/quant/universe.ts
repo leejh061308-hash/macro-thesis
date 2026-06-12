@@ -83,9 +83,24 @@ export const QUANT_UNIVERSE: { ticker: string; name: string }[] = [
   { ticker: "DUK", name: "Duke Energy" },
   { ticker: "CL", name: "Colgate-Palmolive" },
   { ticker: "MO", name: "Altria" },
+  { ticker: "PLD", name: "Prologis" },
+  { ticker: "AMT", name: "American Tower" },
+  { ticker: "EQIX", name: "Equinix" },
+  { ticker: "O", name: "Realty Income" },
+  { ticker: "SPG", name: "Simon Property" },
+  { ticker: "PSA", name: "Public Storage" },
+  { ticker: "C", name: "Citigroup" },
+  { ticker: "WFC", name: "Wells Fargo" },
+  { ticker: "SCHW", name: "Charles Schwab" },
+  { ticker: "MET", name: "MetLife" },
+  { ticker: "PRU", name: "Prudential" },
+  { ticker: "CB", name: "Chubb" },
+  { ticker: "ELV", name: "Elevance Health" },
+  { ticker: "HCA", name: "HCA Healthcare" },
 ];
 
 export const BENCHMARK_TICKER = "SPY";
+export const NASDAQ_BENCHMARK_TICKER = "QQQ";
 
 export const UNIVERSE_TICKERS = QUANT_UNIVERSE.map((s) => s.ticker);
 

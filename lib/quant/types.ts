@@ -3,11 +3,22 @@ export type StrategyId =
   | "growth"
   | "dividend"
   | "quality"
-  | "low-volatility";
+  | "low-volatility"
+  | "quality-factor"
+  | "momentum"
+  | "garp"
+  | "buffett"
+  | "moat"
+  | "defensive"
+  | "ai-beneficiary"
+  | "rate-hike"
+  | "rate-cut";
 
-export type BacktestPeriod = "1y" | "3y" | "5y" | "10y" | "max";
+export type BacktestPeriod = "1y" | "3y" | "5y" | "10y";
 
 export type QuantSection = "strategy" | "ranking" | "screener";
+
+export type StrategyCategory = "core" | "factor" | "macro";
 
 export interface StrategyDefinition {
   id: StrategyId;
@@ -16,6 +27,9 @@ export interface StrategyDefinition {
   description: string;
   criteria: string[];
   icon: string;
+  category: StrategyCategory;
+  selectionNote: string;
+  interpretGuide: string;
 }
 
 export interface QuantMetrics {
@@ -27,15 +41,25 @@ export interface QuantMetrics {
   revenueGrowth: number | null;
   epsGrowth: number | null;
   operatingMargin: number | null;
+  netMargin: number | null;
   dividendYield: number | null;
   dividendGrowth: number | null;
   payoutRatio: number | null;
   roe: number | null;
+  roic: number | null;
   debtToEquity: number | null;
   beta: number | null;
   volatility: number | null;
   maxDrawdown: number | null;
   marketCap: number | null;
+  pegRatio: number | null;
+  freeCashFlowYield: number | null;
+  return3m: number | null;
+  return6m: number | null;
+  return12m: number | null;
+  relativeStrength: number | null;
+  earningsStability: number | null;
+  cashFlowStability: number | null;
 }
 
 export interface StrategyResult {
@@ -50,12 +74,15 @@ export interface BacktestPoint {
   date: string;
   strategyReturn: number;
   benchmarkReturn: number;
+  nasdaqReturn: number;
 }
 
 export interface BacktestStats {
   totalReturn: number;
   benchmarkReturn: number;
+  nasdaqReturn: number;
   excessReturn: number;
+  excessVsNasdaq: number;
   cagr: number;
   mdd: number;
   volatility: number;
@@ -71,6 +98,7 @@ export interface BacktestResult {
   stats: BacktestStats;
   chart: BacktestPoint[];
   methodology: string;
+  selectionNote: string;
 }
 
 export interface ScreenerFilters {

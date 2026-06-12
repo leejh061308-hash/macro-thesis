@@ -4,15 +4,28 @@ import {
   METRICS_CACHE_TTL,
   setCached,
 } from "./cache";
-import { fetchUniverseMetrics } from "./metrics-service";
-import { computeStrategyScore, computeStyleTags, getStrategy, rankByStrategy } from "./strategies";
+import {
+  enrichMomentumFromPrices,
+  fetchUniverseMetrics,
+} from "./metrics-service";
+import {
+  computeStrategyScore,
+  computeStyleTags,
+  getSelectionNote,
+  getStrategy,
+  rankByStrategy,
+} from "./strategies";
 import {
   BACKTEST_METHODOLOGY,
   PERIOD_LABELS,
   runBacktest,
 } from "./backtest-engine";
 import { fetchPricesBatch } from "./yahoo-history";
-import { BENCHMARK_TICKER, UNIVERSE_TICKERS } from "./universe";
+import {
+  BENCHMARK_TICKER,
+  NASDAQ_BENCHMARK_TICKER,
+  UNIVERSE_TICKERS,
+} from "./universe";
 import type {
   BacktestPeriod,
   BacktestResult,
@@ -26,12 +39,13 @@ import type {
 const PORTFOLIO_SIZE = 20;
 
 export async function getUniverseMetrics(): Promise<QuantMetrics[]> {
-  const cached = getCached<QuantMetrics[]>("universe-metrics");
+  const cached = getCached<QuantMetrics[]>("universe-metrics-v2");
   if (cached) return cached;
 
   const metrics = await fetchUniverseMetrics(UNIVERSE_TICKERS);
   if (metrics.length > 0) {
-    setCached("universe-metrics", metrics, METRICS_CACHE_TTL);
+    await enrichMomentumFromPrices(metrics);
+    setCached("universe-metrics-v2", metrics, METRICS_CACHE_TTL);
   }
   return metrics;
 }
@@ -55,7 +69,7 @@ export async function runStrategyBacktest(
   strategyId: StrategyId,
   period: BacktestPeriod
 ): Promise<BacktestResult> {
-  const cacheKey = `backtest:${strategyId}:${period}`;
+  const cacheKey = `backtest-v2:${strategyId}:${period}`;
   const cached = getCached<BacktestResult>(cacheKey);
   if (cached) return cached;
 
@@ -64,13 +78,14 @@ export async function runStrategyBacktest(
   const portfolioTickers = ranked.map((r) => r.ticker);
 
   const priceMap = await fetchPricesBatch(
-    [...portfolioTickers, BENCHMARK_TICKER],
+    [...portfolioTickers, BENCHMARK_TICKER, NASDAQ_BENCHMARK_TICKER],
     period === "5y" ? "5y" : "10y"
   );
 
   const { stats, chart } = runBacktest(
     portfolioTickers,
     BENCHMARK_TICKER,
+    NASDAQ_BENCHMARK_TICKER,
     priceMap,
     period
   );
@@ -84,6 +99,7 @@ export async function runStrategyBacktest(
     stats,
     chart,
     methodology: BACKTEST_METHODOLOGY,
+    selectionNote: getSelectionNote(strategyId),
   };
 
   setCached(cacheKey, result, BACKTEST_CACHE_TTL);
@@ -153,7 +169,7 @@ export function runScreener(
       score: Math.round(
         (computeStrategyScore("value", m, universe) +
           computeStrategyScore("growth", m, universe) +
-          computeStrategyScore("quality", m, universe)) /
+          computeStrategyScore("quality-factor", m, universe)) /
           3
       ),
       tags: computeStyleTags(m, universe),

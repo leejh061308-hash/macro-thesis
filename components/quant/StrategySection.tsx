@@ -2,7 +2,18 @@
 
 import { useEffect, useState } from "react";
 import StockResultCard from "./StockResultCard";
-import type { StrategyDefinition, StrategyId, StrategyResult } from "@/lib/quant/types";
+import type {
+  StrategyCategory,
+  StrategyDefinition,
+  StrategyId,
+  StrategyResult,
+} from "@/lib/quant/types";
+
+const CATEGORY_LABELS: Record<StrategyCategory, string> = {
+  core: "기본 전략",
+  factor: "팩터 전략",
+  macro: "거시경제 전략",
+};
 
 interface StrategySectionProps {
   strategies: StrategyDefinition[];
@@ -40,50 +51,64 @@ export default function StrategySection({
       .finally(() => setLoading(false));
   }, [selectedId]);
 
+  const categories: StrategyCategory[] = ["core", "factor", "macro"];
+
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <p className="text-xs text-gray-400">
-          검증된 투자 전략을 선택하세요. 모든 종목에 동일한 기준을 적용합니다.
-        </p>
-        <div className="grid gap-2">
-          {strategies.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => onSelect(s.id)}
-              className={`rounded-xl border p-3 text-left transition-colors ${
-                selectedId === s.id
-                  ? "border-accent/40 bg-accent/10"
-                  : "border-surface-border bg-surface-card hover:border-accent/20"
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-accent">{s.icon}</span>
-                  <span className="text-sm font-semibold text-white">
-                    {s.shortName}
-                  </span>
-                </div>
-                <label className="flex items-center gap-1 text-[10px] text-neutral">
-                  <input
-                    type="checkbox"
-                    checked={compareSelection.includes(s.id)}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      onToggleCompare(s.id);
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="accent-accent"
-                  />
-                  비교
-                </label>
-              </div>
-              <p className="mt-1 text-[11px] text-gray-400">{s.description}</p>
-            </button>
-          ))}
-        </div>
-      </div>
+      <p className="text-xs text-gray-400">
+        검증된 투자 전략을 선택하세요. 선정 기준은 전략별로 공개됩니다.
+      </p>
+
+      {categories.map((cat) => {
+        const group = strategies.filter((s) => s.category === cat);
+        if (group.length === 0) return null;
+        return (
+          <div key={cat} className="space-y-2">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-neutral">
+              {CATEGORY_LABELS[cat]}
+            </h3>
+            <div className="grid gap-2">
+              {group.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => onSelect(s.id)}
+                  className={`rounded-xl border p-3 text-left transition-colors ${
+                    selectedId === s.id
+                      ? "border-accent/40 bg-accent/10"
+                      : "border-surface-border bg-surface-card hover:border-accent/20"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-accent">{s.icon}</span>
+                      <span className="text-sm font-semibold text-white">
+                        {s.shortName}
+                      </span>
+                    </div>
+                    <label className="flex items-center gap-1 text-[10px] text-neutral">
+                      <input
+                        type="checkbox"
+                        checked={compareSelection.includes(s.id)}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          onToggleCompare(s.id);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="accent-accent"
+                      />
+                      비교
+                    </label>
+                  </div>
+                  <p className="mt-1 text-[11px] text-gray-400">
+                    {s.description}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
 
       {compareSelection.length >= 2 && (
         <button

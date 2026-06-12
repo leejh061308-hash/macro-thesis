@@ -9,7 +9,8 @@ import {
   BACKTEST_INTERPRET_SYSTEM,
   buildBacktestInterpretPrompt,
 } from "@/lib/prompts/quant-backtest";
-import type { BacktestStats } from "@/lib/quant/types";
+import type { BacktestStats, StrategyId } from "@/lib/quant/types";
+import { isValidStrategyId } from "@/lib/quant/constants";
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,12 +21,20 @@ export async function POST(request: NextRequest) {
     }
 
     const body = (await request.json()) as {
+      strategyId?: StrategyId;
       strategyName?: string;
       periodLabel?: string;
       stats?: BacktestStats;
+      selectionNote?: string;
     };
 
-    if (!body.strategyName || !body.periodLabel || !body.stats) {
+    if (
+      !body.strategyId ||
+      !isValidStrategyId(body.strategyId) ||
+      !body.strategyName ||
+      !body.periodLabel ||
+      !body.stats
+    ) {
       return NextResponse.json(
         { error: "백테스트 결과가 필요합니다." },
         { status: 400 }
@@ -41,14 +50,16 @@ export async function POST(request: NextRequest) {
         {
           role: "user",
           content: buildBacktestInterpretPrompt(
+            body.strategyId,
             body.strategyName,
             body.periodLabel,
-            body.stats
+            body.stats,
+            body.selectionNote ?? ""
           ),
         },
       ],
       temperature: 0.4,
-      max_tokens: 300,
+      max_tokens: 400,
     });
 
     const raw = completion.choices[0]?.message?.content;

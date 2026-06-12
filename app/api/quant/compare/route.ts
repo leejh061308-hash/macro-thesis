@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { compareStrategies } from "@/lib/quant/service";
+import { isValidStrategyId } from "@/lib/quant/constants";
 import type { BacktestPeriod, StrategyId } from "@/lib/quant/types";
-
-const VALID: StrategyId[] = [
-  "value",
-  "growth",
-  "dividend",
-  "quality",
-  "low-volatility",
-];
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,7 +11,7 @@ export async function POST(request: NextRequest) {
     };
 
     const strategies = (body.strategies ?? []).filter((id) =>
-      VALID.includes(id)
+      isValidStrategyId(id)
     );
     if (strategies.length < 2) {
       return NextResponse.json(

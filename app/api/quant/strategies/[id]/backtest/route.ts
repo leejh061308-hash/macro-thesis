@@ -1,34 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runStrategyBacktest } from "@/lib/quant/service";
-import type { BacktestPeriod, StrategyId } from "@/lib/quant/types";
-
-const VALID: StrategyId[] = [
-  "value",
-  "growth",
-  "dividend",
-  "quality",
-  "low-volatility",
-];
-
-const PERIODS: BacktestPeriod[] = ["1y", "3y", "5y", "10y", "max"];
+import { BACKTEST_PERIODS, isValidStrategyId } from "@/lib/quant/constants";
+import type { BacktestPeriod } from "@/lib/quant/types";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  if (!VALID.includes(id as StrategyId)) {
+  if (!isValidStrategyId(id)) {
     return NextResponse.json({ error: "Unknown strategy" }, { status: 404 });
   }
 
   const period = (request.nextUrl.searchParams.get("period") ??
     "3y") as BacktestPeriod;
-  if (!PERIODS.includes(period)) {
+  if (!BACKTEST_PERIODS.includes(period)) {
     return NextResponse.json({ error: "Invalid period" }, { status: 400 });
   }
 
   try {
-    const result = await runStrategyBacktest(id as StrategyId, period);
+    const result = await runStrategyBacktest(id, period);
     return NextResponse.json(result);
   } catch (error) {
     console.error("[quant/backtest]", error);

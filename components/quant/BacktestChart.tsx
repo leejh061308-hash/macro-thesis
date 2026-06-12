@@ -17,6 +17,12 @@ interface BacktestChartProps {
   strategyName: string;
 }
 
+const LINE_LABELS: Record<string, string> = {
+  strategyReturn: "전략",
+  benchmarkReturn: "S&P500",
+  nasdaqReturn: "Nasdaq100",
+};
+
 export default function BacktestChart({
   data,
   strategyName,
@@ -30,7 +36,7 @@ export default function BacktestChart({
   }
 
   return (
-    <div className="h-52">
+    <div className="h-56">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data}>
           <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
@@ -56,16 +62,19 @@ export default function BacktestChart({
               borderRadius: "8px",
               fontSize: "12px",
             }}
-            formatter={(value, name) => [
-              `${Number(value ?? 0).toFixed(1)}%`,
-              name === "strategyReturn" ? strategyName : "S&P500",
-            ]}
+            formatter={(value, name) => {
+              const key = String(name);
+              const label =
+                key === "strategyReturn" ? strategyName : LINE_LABELS[key] ?? key;
+              return [`${Number(value ?? 0).toFixed(1)}%`, label];
+            }}
           />
           <Legend
-            wrapperStyle={{ fontSize: "11px", color: "#8b949e" }}
-            formatter={(value) =>
-              value === "strategyReturn" ? strategyName : "S&P500 (SPY)"
-            }
+            wrapperStyle={{ fontSize: "10px", color: "#8b949e" }}
+            formatter={(value) => {
+              if (value === "strategyReturn") return strategyName;
+              return LINE_LABELS[value] ?? value;
+            }}
           />
           <Line
             type="monotone"
@@ -81,6 +90,14 @@ export default function BacktestChart({
             strokeWidth={1.5}
             dot={false}
             strokeDasharray="4 4"
+          />
+          <Line
+            type="monotone"
+            dataKey="nasdaqReturn"
+            stroke="#58a6ff"
+            strokeWidth={1.5}
+            dot={false}
+            strokeDasharray="2 2"
           />
         </LineChart>
       </ResponsiveContainer>

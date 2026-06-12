@@ -41,12 +41,27 @@ export default function BacktestStatsGrid({ stats }: BacktestStatsGridProps) {
             {stats.totalReturn.toFixed(1)}%
           </span>
         </div>
-        <div className="mt-1 flex justify-between text-[11px] text-neutral">
-          <span>S&P500 {stats.benchmarkReturn >= 0 ? "+" : ""}{stats.benchmarkReturn.toFixed(1)}%</span>
-          <span>
-            초과수익 {sign}
-            {stats.excessReturn.toFixed(1)}%
-          </span>
+        <div className="mt-1 space-y-0.5 text-[11px] text-neutral">
+          <div className="flex justify-between">
+            <span>
+              S&P500 {stats.benchmarkReturn >= 0 ? "+" : ""}
+              {stats.benchmarkReturn.toFixed(1)}%
+            </span>
+            <span>
+              초과 {sign}
+              {stats.excessReturn.toFixed(1)}%
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span>
+              Nasdaq100 {stats.nasdaqReturn >= 0 ? "+" : ""}
+              {stats.nasdaqReturn.toFixed(1)}%
+            </span>
+            <span>
+              초과 {stats.excessVsNasdaq >= 0 ? "+" : ""}
+              {stats.excessVsNasdaq.toFixed(1)}%
+            </span>
+          </div>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2">

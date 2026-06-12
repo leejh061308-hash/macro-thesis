@@ -6,7 +6,6 @@ export const PERIOD_LABELS: Record<BacktestPeriod, string> = {
   "3y": "3년",
   "5y": "5년",
   "10y": "10년",
-  max: "최대 기간",
 };
 
 export const PERIOD_MONTHS: Record<BacktestPeriod, number> = {
@@ -14,7 +13,6 @@ export const PERIOD_MONTHS: Record<BacktestPeriod, number> = {
   "3y": 36,
   "5y": 60,
   "10y": 120,
-  max: 120,
 };
 
 function sliceByPeriod(
@@ -86,16 +84,16 @@ function portfolioReturns(
 }
 
 function cumulativeFromReturns(monthlyReturns: number[]): number[] {
-  const cumulative: number[] = [0];
+  const cumulative: number[] = [];
   let value = 1;
   for (const r of monthlyReturns) {
     value *= 1 + r;
     cumulative.push(value - 1);
   }
-  return cumulative.slice(1);
+  return cumulative;
 }
 
-function computeStats(monthlyReturns: number[]): Omit<BacktestStats, "benchmarkReturn" | "excessReturn" | "totalReturn"> & { totalReturn: number } {
+function computeStats(monthlyReturns: number[]) {
   const cumulative = cumulativeFromReturns(monthlyReturns);
   const totalReturn = cumulative.length > 0 ? cumulative[cumulative.length - 1] : 0;
   const years = monthlyReturns.length / 12;
@@ -120,24 +118,16 @@ function computeStats(monthlyReturns: number[]): Omit<BacktestStats, "benchmarkR
     (monthlyReturns.length || 1);
   const volatility = Math.sqrt(variance * 12);
   const winRate =
-    monthlyReturns.filter((r) => r > 0).length /
-    (monthlyReturns.length || 1);
-  const sharpe =
-    volatility > 0 ? (cagr - 0.04) / volatility : 0;
+    monthlyReturns.filter((r) => r > 0).length / (monthlyReturns.length || 1);
+  const sharpe = volatility > 0 ? (cagr - 0.04) / volatility : 0;
 
-  return {
-    totalReturn,
-    cagr,
-    mdd: maxDd,
-    volatility,
-    winRate,
-    sharpe,
-  };
+  return { totalReturn, cagr, mdd: maxDd, volatility, winRate, sharpe };
 }
 
 export function runBacktest(
   portfolioTickers: string[],
-  benchmarkTicker: string,
+  spyTicker: string,
+  nasdaqTicker: string,
   priceMap: Map<string, PricePoint[]>,
   period: BacktestPeriod
 ): { stats: BacktestStats; chart: BacktestPoint[] } {
@@ -146,18 +136,21 @@ export function runBacktest(
     sliced.set(ticker, sliceByPeriod(points, period));
   }
 
-  const allTickers = [...portfolioTickers, benchmarkTicker];
+  const allTickers = [...portfolioTickers, spyTicker, nasdaqTicker];
   const { dates, returns } = alignSeries(sliced, allTickers);
   const length = dates.length;
 
   const strategyMonthly = portfolioReturns(portfolioTickers, returns, length);
-  const benchmarkMonthly = returns.get(benchmarkTicker) ?? [];
+  const spyMonthly = returns.get(spyTicker) ?? [];
+  const nasdaqMonthly = returns.get(nasdaqTicker) ?? [];
 
   const strategyCum = cumulativeFromReturns(strategyMonthly);
-  const benchmarkCum = cumulativeFromReturns(benchmarkMonthly);
+  const spyCum = cumulativeFromReturns(spyMonthly);
+  const nasdaqCum = cumulativeFromReturns(nasdaqMonthly);
 
   const strategyStats = computeStats(strategyMonthly);
-  const benchmarkStats = computeStats(benchmarkMonthly);
+  const spyStats = computeStats(spyMonthly);
+  const nasdaqStats = computeStats(nasdaqMonthly);
 
   const chart: BacktestPoint[] = dates.map((ts, i) => ({
     date: new Date(ts).toLocaleDateString("ko-KR", {
@@ -165,15 +158,17 @@ export function runBacktest(
       month: "short",
     }),
     strategyReturn: (strategyCum[i] ?? 0) * 100,
-    benchmarkReturn: (benchmarkCum[i] ?? 0) * 100,
+    benchmarkReturn: (spyCum[i] ?? 0) * 100,
+    nasdaqReturn: (nasdaqCum[i] ?? 0) * 100,
   }));
 
   return {
     stats: {
       totalReturn: strategyStats.totalReturn * 100,
-      benchmarkReturn: benchmarkStats.totalReturn * 100,
-      excessReturn:
-        (strategyStats.totalReturn - benchmarkStats.totalReturn) * 100,
+      benchmarkReturn: spyStats.totalReturn * 100,
+      nasdaqReturn: nasdaqStats.totalReturn * 100,
+      excessReturn: (strategyStats.totalReturn - spyStats.totalReturn) * 100,
+      excessVsNasdaq: (strategyStats.totalReturn - nasdaqStats.totalReturn) * 100,
       cagr: strategyStats.cagr * 100,
       mdd: strategyStats.mdd * 100,
       volatility: strategyStats.volatility * 100,
@@ -185,4 +180,4 @@ export function runBacktest(
 }
 
 export const BACKTEST_METHODOLOGY =
-  "동일 유니버스 내 백분위 점수로 상위 20종목을 동일 비중 구성하고, 월간 수익률을 합산합니다. 벤치마크는 S&P500 ETF(SPY)입니다. 재무 지표는 최신 데이터 기준이며, 과거 시점 재무 변화는 반영하지 않습니다.";
+  "동일 선정 기준으로 상위 20종목을 동일 비중 구성하고, 월간 수익률을 합산합니다. 벤치마크는 S&P500(SPY)과 Nasdaq100(QQQ)입니다. 재무 지표는 최신 데이터 기준이며, 과거 시점 재무 변화는 반영하지 않습니다.";
