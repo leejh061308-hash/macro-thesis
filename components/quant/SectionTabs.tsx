@@ -3,9 +3,8 @@
 import type { QuantSection } from "@/lib/quant/types";
 
 const SECTIONS: { id: QuantSection; label: string }[] = [
-  { id: "strategy", label: "전략" },
-  { id: "ranking", label: "랭킹" },
   { id: "screener", label: "스크리너" },
+  { id: "ranking", label: "랭킹" },
 ];
 
 interface SectionTabsProps {

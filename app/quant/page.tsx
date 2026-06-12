@@ -7,7 +7,7 @@ export default function QuantPage() {
       <div>
         <h2 className="text-lg font-bold text-white">퀀트 전략</h2>
         <p className="text-xs text-gray-400">
-          검증된 전략 선택 · 백테스트 · 종목 스크리닝
+          전략 기반 스크리닝 · 고급 조건 검색 · 랭킹
         </p>
         <AiDisclaimer className="mt-1.5" />
       </div>

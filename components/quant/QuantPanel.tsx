@@ -6,7 +6,6 @@ import ComparePanel from "./ComparePanel";
 import RankingSection from "./RankingSection";
 import ScreenerSection from "./ScreenerSection";
 import SectionTabs from "./SectionTabs";
-import StrategySection from "./StrategySection";
 import StrategyEntryEnvironment from "@/components/timing/StrategyEntryEnvironment";
 import { useQuantFavorites } from "@/hooks/useQuantFavorites";
 import type {
@@ -17,7 +16,7 @@ import type {
 } from "@/lib/quant/types";
 
 export default function QuantPanel() {
-  const [section, setSection] = useState<QuantSection>("strategy");
+  const [section, setSection] = useState<QuantSection>("screener");
   const [strategies, setStrategies] = useState<StrategyDefinition[]>([]);
   const [selectedId, setSelectedId] = useState<StrategyId | null>("growth");
   const [compareSelection, setCompareSelection] = useState<StrategyId[]>([]);
@@ -79,13 +78,13 @@ export default function QuantPanel() {
         </div>
       )}
 
-      {section === "strategy" && (
+      {section === "screener" && (
         <>
           <StrategyEntryEnvironment />
-          <StrategySection
+          <ScreenerSection
             strategies={strategies}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
+            selectedStrategyId={selectedId}
+            onSelectStrategy={setSelectedId}
             favoriteTickers={favorites.tickers}
             onToggleTickerFavorite={toggleTicker}
             compareSelection={compareSelection}
@@ -111,13 +110,6 @@ export default function QuantPanel() {
         />
       )}
 
-      {section === "screener" && (
-        <ScreenerSection
-          favoriteTickers={favorites.tickers}
-          onToggleTickerFavorite={toggleTicker}
-        />
-      )}
-
       {compareResult && (
         <ComparePanel
           result={compareResult}
@@ -137,7 +129,7 @@ export default function QuantPanel() {
                     key={id}
                     type="button"
                     onClick={() => {
-                      setSection("strategy");
+                      setSection("screener");
                       setSelectedId(id);
                     }}
                     className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] text-accent"
