@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import RefreshStatus from "@/components/stocks/RefreshStatus";
 import StockCard from "@/components/stocks/StockCard";
+import TodaysOpportunities from "@/components/timing/TodaysOpportunities";
+import WatchlistTimingSection from "@/components/timing/WatchlistTimingSection";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { STOCK_REFRESH_INTERVAL } from "@/lib/constants";
 import { WATCHLIST_UPDATED_EVENT } from "@/lib/watchlist-events";
@@ -272,6 +274,8 @@ export default function StocksPage() {
 
       {!isLoading && !error && stocks.length > 0 && (
         <div className="space-y-3">
+          <WatchlistTimingSection />
+          <TodaysOpportunities />
           {stocks.map((stock) => (
             <StockCard
               key={stock.ticker}

@@ -7,6 +7,7 @@ import RankingSection from "./RankingSection";
 import ScreenerSection from "./ScreenerSection";
 import SectionTabs from "./SectionTabs";
 import StrategySection from "./StrategySection";
+import StrategyEntryEnvironment from "@/components/timing/StrategyEntryEnvironment";
 import { useQuantFavorites } from "@/hooks/useQuantFavorites";
 import type {
   CompareResult,
@@ -80,6 +81,7 @@ export default function QuantPanel() {
 
       {section === "strategy" && (
         <>
+          <StrategyEntryEnvironment />
           <StrategySection
             strategies={strategies}
             selectedId={selectedId}

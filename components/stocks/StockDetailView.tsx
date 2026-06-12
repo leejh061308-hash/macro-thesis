@@ -6,6 +6,7 @@ import IndexChartView from "@/components/stocks/IndexChartView";
 import RefreshStatus from "@/components/stocks/RefreshStatus";
 import StockChart from "@/components/stocks/StockChart";
 import StockMetrics from "@/components/stocks/StockMetrics";
+import TimingSection from "@/components/timing/TimingSection";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { STOCK_REFRESH_INTERVAL } from "@/lib/constants";
 import { isIndexTicker, normalizeTicker } from "@/lib/tickers";
@@ -134,6 +135,7 @@ function StockDetailContent({ ticker }: { ticker: string }) {
       </div>
 
       <StockMetrics detail={detail} />
+      <TimingSection ticker={detail.ticker} />
       <StockChart ticker={detail.ticker} />
     </div>
   );

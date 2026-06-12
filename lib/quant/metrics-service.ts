@@ -200,6 +200,12 @@ function computeTrailingReturn(
   return (end - start) / start;
 }
 
+export async function fetchTickerMetrics(
+  ticker: string
+): Promise<QuantMetrics | null> {
+  return fetchOne(ticker);
+}
+
 export async function fetchUniverseMetrics(
   tickers: string[]
 ): Promise<QuantMetrics[]> {
