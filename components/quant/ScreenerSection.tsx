@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ScreenerResultCard from "@/components/screener/ScreenerResultCard";
 import { useScreenerPresets } from "@/hooks/useScreenerPresets";
 import type {
@@ -10,8 +10,6 @@ import type {
 } from "@/lib/quant/types";
 import type {
   AdvancedFilters,
-  BeginnerMacro,
-  BeginnerTheme,
   MacroFilter,
   RangeFilter,
   ScreenerRequest,
@@ -38,21 +36,6 @@ const CATEGORY_LABELS: Record<StrategyCategory, string> = {
   style: "투자 스타일 전략",
   theme: "테마 전략",
 };
-
-const THEME_CHIPS: { id: BeginnerTheme; label: string }[] = [
-  { id: "ai", label: "AI 수혜주" },
-  { id: "datacenter", label: "데이터센터" },
-  { id: "power-infra", label: "전력 인프라" },
-  { id: "cloud", label: "클라우드" },
-  { id: "semiconductor", label: "반도체" },
-];
-
-const MACRO_CHIPS: { id: BeginnerMacro; label: string }[] = [
-  { id: "rate-hike", label: "금리 인상 수혜" },
-  { id: "rate-cut", label: "금리 인하 수혜" },
-  { id: "expansion", label: "경기 확장" },
-  { id: "recession-defense", label: "경기 침체 방어" },
-];
 
 const EXTRA_MACRO: { id: MacroFilter; label: string }[] = [
   { id: "cyclical", label: "경기민감주" },
@@ -206,8 +189,6 @@ export default function ScreenerSection({
   compareLoading,
 }: ScreenerSectionProps) {
   const [mode, setMode] = useState<ViewMode>("basic");
-  const [themes, setThemes] = useState<BeginnerTheme[]>([]);
-  const [macroBeginner, setMacroBeginner] = useState<BeginnerMacro[]>([]);
   const [extraMacro, setExtraMacro] = useState<MacroFilter[]>([]);
   const [advanced, setAdvanced] = useState<AdvancedFilters>({});
   const [sort, setSort] = useState<SortField>("companyScore");
@@ -223,48 +204,27 @@ export default function ScreenerSection({
 
   const { presets, savePreset, removePreset } = useScreenerPresets();
 
-  const basicMacroFilters = useMemo(
-    () => [...new Set(themes as MacroFilter[])],
-    [themes]
-  );
-
-  const advancedMacroFilters = useMemo(
-    () => [...new Set([...(themes as MacroFilter[]), ...extraMacro])],
-    [themes, extraMacro]
-  );
-
   const buildBasicRequest = useCallback((): ScreenerRequest => {
     return {
       mode: "beginner",
-      beginner: { themes, macro: macroBeginner },
       strategies: selectedStrategyId ? [selectedStrategyId] : undefined,
-      macroFilters: basicMacroFilters.length > 0 ? basicMacroFilters : undefined,
       sort: selectedStrategyId ? "strategyScore" : sort,
       sortDir,
       limit: 40,
     };
-  }, [themes, macroBeginner, selectedStrategyId, basicMacroFilters, sort, sortDir]);
+  }, [selectedStrategyId, sort, sortDir]);
 
   const buildAdvancedRequest = useCallback((): ScreenerRequest => {
     return {
       mode: "advanced",
-      beginner: { themes, macro: macroBeginner },
       strategies: selectedStrategyId ? [selectedStrategyId] : undefined,
-      macroFilters: advancedMacroFilters.length > 0 ? advancedMacroFilters : undefined,
+      macroFilters: extraMacro.length > 0 ? extraMacro : undefined,
       advanced,
       sort,
       sortDir,
       limit: 50,
     };
-  }, [
-    themes,
-    macroBeginner,
-    selectedStrategyId,
-    advancedMacroFilters,
-    advanced,
-    sort,
-    sortDir,
-  ]);
+  }, [selectedStrategyId, extraMacro, advanced, sort, sortDir]);
 
   const runSearch = useCallback(async (request: ScreenerRequest) => {
     setLoading(true);
@@ -324,10 +284,8 @@ export default function ScreenerSection({
     if (mode !== "basic" || !selectedStrategyId) return;
     runSearch({
       mode: "beginner",
-      beginner: { themes, macro: macroBeginner },
       strategies: [selectedStrategyId],
-      macroFilters: basicMacroFilters.length > 0 ? basicMacroFilters : undefined,
-      sort: selectedStrategyId ? "strategyScore" : sort,
+      sort: "strategyScore",
       sortDir,
       limit: 40,
     });
@@ -338,8 +296,6 @@ export default function ScreenerSection({
     setMode(presetToViewMode(presetRequest));
     setSort(presetRequest.sort ?? "companyScore");
     setSortDir(presetRequest.sortDir ?? "desc");
-    setThemes(presetRequest.beginner?.themes ?? []);
-    setMacroBeginner(presetRequest.beginner?.macro ?? []);
     setExtraMacro(presetRequest.macroFilters ?? []);
     setAdvanced(presetRequest.advanced ?? {});
     if (presetRequest.strategies?.[0]) onSelectStrategy(presetRequest.strategies[0]);
@@ -416,7 +372,7 @@ export default function ScreenerSection({
       {mode === "basic" && (
         <>
           <p className="text-xs text-gray-400">
-            검증된 투자 전략을 선택하고 테마·거시 조건을 추가해 검색하세요.
+            검증된 투자 전략을 선택해 검색하세요.
           </p>
 
           {selectedStrategy && (
@@ -491,29 +447,6 @@ export default function ScreenerSection({
             </button>
           )}
 
-          <div className="rounded-xl border border-surface-border bg-surface-card p-3">
-            <h4 className="text-xs font-semibold text-gray-300">테마 · 거시 (선택)</h4>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {THEME_CHIPS.map((t) => (
-                <Chip
-                  key={t.id}
-                  label={t.label}
-                  active={themes.includes(t.id)}
-                  onClick={() => setThemes((prev) => toggleItem(prev, t.id))}
-                />
-              ))}
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {MACRO_CHIPS.map((m) => (
-                <Chip
-                  key={m.id}
-                  label={m.label}
-                  active={macroBeginner.includes(m.id)}
-                  onClick={() => setMacroBeginner((prev) => toggleItem(prev, m.id))}
-                />
-              ))}
-            </div>
-          </div>
         </>
       )}
 
