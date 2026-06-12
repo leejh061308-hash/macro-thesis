@@ -58,13 +58,6 @@ export async function getStrategyResults(
   return rankByStrategy(strategyId, universe, limit);
 }
 
-export async function getRanking(
-  strategyId: StrategyId,
-  limit = 50
-): Promise<StrategyResult[]> {
-  return getStrategyResults(strategyId, limit);
-}
-
 export async function runStrategyBacktest(
   strategyId: StrategyId,
   period: BacktestPeriod

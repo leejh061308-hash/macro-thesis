@@ -3,20 +3,16 @@
 import { useEffect, useState } from "react";
 import BacktestPanel from "./BacktestPanel";
 import ComparePanel from "./ComparePanel";
-import RankingSection from "./RankingSection";
 import ScreenerSection from "./ScreenerSection";
-import SectionTabs from "./SectionTabs";
 import StrategyEntryEnvironment from "@/components/timing/StrategyEntryEnvironment";
 import { useQuantFavorites } from "@/hooks/useQuantFavorites";
 import type {
   CompareResult,
-  QuantSection,
   StrategyDefinition,
   StrategyId,
 } from "@/lib/quant/types";
 
 export default function QuantPanel() {
-  const [section, setSection] = useState<QuantSection>("screener");
   const [strategies, setStrategies] = useState<StrategyDefinition[]>([]);
   const [selectedId, setSelectedId] = useState<StrategyId | null>("growth");
   const [compareSelection, setCompareSelection] = useState<StrategyId[]>([]);
@@ -69,8 +65,6 @@ export default function QuantPanel() {
 
   return (
     <div className="space-y-4">
-      <SectionTabs active={section} onChange={setSection} />
-
       {metricsWarning && (
         <div className="rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-[11px] text-accent">
           FINNHUB_API_KEY가 설정되지 않았습니다. Railway/서버 환경 변수를
@@ -78,35 +72,23 @@ export default function QuantPanel() {
         </div>
       )}
 
-      {section === "screener" && (
-        <>
-          <StrategyEntryEnvironment />
-          <ScreenerSection
-            strategies={strategies}
-            selectedStrategyId={selectedId}
-            onSelectStrategy={setSelectedId}
-            favoriteTickers={favorites.tickers}
-            onToggleTickerFavorite={toggleTicker}
-            compareSelection={compareSelection}
-            onToggleCompare={handleToggleCompare}
-            onCompare={handleCompare}
-            compareLoading={compareLoading}
-          />
-          {selectedStrategy && (
-            <BacktestPanel
-              strategy={selectedStrategy}
-              isFavorite={favorites.strategies.includes(selectedStrategy.id)}
-              onToggleFavorite={() => toggleStrategy(selectedStrategy.id)}
-            />
-          )}
-        </>
-      )}
-
-      {section === "ranking" && (
-        <RankingSection
-          strategies={strategies}
-          favoriteTickers={favorites.tickers}
-          onToggleTickerFavorite={toggleTicker}
+      <StrategyEntryEnvironment />
+      <ScreenerSection
+        strategies={strategies}
+        selectedStrategyId={selectedId}
+        onSelectStrategy={setSelectedId}
+        favoriteTickers={favorites.tickers}
+        onToggleTickerFavorite={toggleTicker}
+        compareSelection={compareSelection}
+        onToggleCompare={handleToggleCompare}
+        onCompare={handleCompare}
+        compareLoading={compareLoading}
+      />
+      {selectedStrategy && (
+        <BacktestPanel
+          strategy={selectedStrategy}
+          isFavorite={favorites.strategies.includes(selectedStrategy.id)}
+          onToggleFavorite={() => toggleStrategy(selectedStrategy.id)}
         />
       )}
 
@@ -128,10 +110,7 @@ export default function QuantPanel() {
                   <button
                     key={id}
                     type="button"
-                    onClick={() => {
-                      setSection("screener");
-                      setSelectedId(id);
-                    }}
+                    onClick={() => setSelectedId(id)}
                     className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] text-accent"
                   >
                     {s.shortName}

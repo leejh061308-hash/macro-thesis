@@ -16,8 +16,6 @@ export type StrategyId =
 
 export type BacktestPeriod = "1y" | "3y" | "5y" | "10y";
 
-export type QuantSection = "screener" | "ranking";
-
 export type StrategyCategory = "core" | "factor" | "macro";
 
 export interface StrategyDefinition {
