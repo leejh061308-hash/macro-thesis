@@ -37,6 +37,10 @@ import {
 } from "./ranking";
 import { getUniverseTickers } from "./index-universe";
 import { MULTI_FACTOR_STRATEGIES } from "./multi-factor";
+import {
+  computeAllStrategyOverviews,
+  type StrategyOverviewItem,
+} from "./strategy-overview";
 import type {
   BacktestConfig,
   BacktestPeriod,
@@ -73,6 +77,17 @@ export async function getUniverseMetrics(
     setCached(cacheKey, metrics, METRICS_CACHE_TTL);
   }
   return metrics;
+}
+
+export async function getStrategyOverviews(): Promise<StrategyOverviewItem[]> {
+  const cacheKey = "strategy-overview-v1";
+  const cached = getCached<StrategyOverviewItem[]>(cacheKey);
+  if (cached) return cached;
+
+  const universe = await getUniverseMetrics();
+  const overviews = computeAllStrategyOverviews(universe);
+  setCached(cacheKey, overviews, METRICS_CACHE_TTL);
+  return overviews;
 }
 
 export async function getRanking(

@@ -1,22 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import FactorBacktestPanel from "./FactorBacktestPanel";
-import FactorStrategyPanel from "./FactorStrategyPanel";
-import RankingPanel from "./RankingPanel";
+import AdvancedQuantPanel from "./AdvancedQuantPanel";
+import StrategyDetailPanel from "./StrategyDetailPanel";
+import StrategyOverviewPanel from "./StrategyOverviewPanel";
 import ViewModeToggle from "./ViewModeToggle";
 import { useQuantFavorites } from "@/hooks/useQuantFavorites";
 import { useQuantViewMode } from "@/hooks/useQuantViewMode";
-import { MULTI_FACTOR_STRATEGIES } from "@/lib/quant/multi-factor";
 import type {
   FactorWeights,
   MultiFactorStrategyId,
+  StrategyId,
   UniverseId,
 } from "@/lib/quant/types";
 
 export default function QuantPanel() {
   const { mode, setMode, hydrated } = useQuantViewMode();
-  const [strategyId, setStrategyId] =
+  const [selectedStrategyId, setSelectedStrategyId] = useState<StrategyId | null>(
+    null
+  );
+  const [advancedStrategyId, setAdvancedStrategyId] =
     useState<MultiFactorStrategyId | "custom">("all-factor");
   const [weights, setWeights] = useState<FactorWeights>({
     value: 25,
@@ -31,27 +34,21 @@ export default function QuantPanel() {
   const { favorites, toggleTicker } = useQuantFavorites();
 
   useEffect(() => {
-    fetch("/api/quant/ranking?strategy=all-factor&limit=1")
+    fetch("/api/quant/strategies/overview")
       .then((res) => res.json())
       .then((data) => setMetricsWarning(!data.metricsAvailable))
       .catch(() => {});
   }, []);
 
-  const strategyName =
-    strategyId === "custom"
-      ? "커스텀 멀티팩터"
-      : (MULTI_FACTOR_STRATEGIES.find((s) => s.id === strategyId)?.name ??
-        "All Factor");
-
-  const strategyShortName =
-    strategyId === "custom"
-      ? "커스텀 전략"
-      : (MULTI_FACTOR_STRATEGIES.find((s) => s.id === strategyId)?.shortName ??
-        "올팩터");
+  useEffect(() => {
+    if (mode === "advanced") setSelectedStrategyId(null);
+  }, [mode]);
 
   if (!hydrated) {
     return <div className="h-24 animate-pulse rounded-xl bg-surface-border/30" />;
   }
+
+  const isBasic = mode === "basic";
 
   return (
     <div className="space-y-4">
@@ -64,36 +61,31 @@ export default function QuantPanel() {
         </div>
       )}
 
-      <FactorStrategyPanel
-        viewMode={mode}
-        strategies={MULTI_FACTOR_STRATEGIES}
-        selectedId={strategyId}
-        onSelectStrategy={setStrategyId}
-        weights={weights}
-        onWeightsChange={setWeights}
-        universeId={universeId}
-        onUniverseChange={setUniverseId}
-        strategyShortName={strategyShortName}
-      />
-
-      <RankingPanel
-        viewMode={mode}
-        strategyId={strategyId}
-        weights={weights}
-        universeId={universeId}
-        strategyShortName={strategyShortName}
-        onSelectStock={(t) => setSelectedTicker(t || null)}
-        selectedTicker={selectedTicker}
-        favoriteTickers={favorites.tickers}
-        onToggleFavorite={toggleTicker}
-      />
-
-      <FactorBacktestPanel
-        viewMode={mode}
-        strategyId={strategyId}
-        weights={weights}
-        strategyName={strategyName}
-      />
+      {isBasic ? (
+        selectedStrategyId ? (
+          <StrategyDetailPanel
+            strategyId={selectedStrategyId}
+            onBack={() => setSelectedStrategyId(null)}
+            favoriteTickers={favorites.tickers}
+            onToggleFavorite={toggleTicker}
+          />
+        ) : (
+          <StrategyOverviewPanel onSelectStrategy={setSelectedStrategyId} />
+        )
+      ) : (
+        <AdvancedQuantPanel
+          strategyId={advancedStrategyId}
+          onStrategyIdChange={setAdvancedStrategyId}
+          weights={weights}
+          onWeightsChange={setWeights}
+          universeId={universeId}
+          onUniverseChange={setUniverseId}
+          selectedTicker={selectedTicker}
+          onSelectStock={setSelectedTicker}
+          favoriteTickers={favorites.tickers}
+          onToggleFavorite={toggleTicker}
+        />
+      )}
 
       {favorites.tickers.length > 0 && (
         <div className="rounded-xl border border-surface-border bg-surface-card p-4 card-glow">

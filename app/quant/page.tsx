@@ -5,9 +5,9 @@ export default function QuantPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-bold text-white">퀀트 랭킹</h2>
+        <h2 className="text-lg font-bold text-white">AI 투자</h2>
         <p className="text-xs text-gray-400">
-          팩터 투자 · Percentile Rank · 멀티팩터 전략 · 백테스트
+          전략 · 추천 종목 · AI 해석
         </p>
         <AiDisclaimer className="mt-1.5" />
       </div>

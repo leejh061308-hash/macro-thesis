@@ -1,4 +1,4 @@
-import type { FactorId, RankingEntry } from "./types";
+import type { FactorId, RankingEntry, StrategyResult } from "./types";
 
 export type QuantViewMode = "basic" | "advanced";
 
@@ -79,6 +79,36 @@ function buildOneLiner(
   }
 
   return entry.aiSummary.split(".")[0] + ".";
+}
+
+export function deriveBasicStockViewFromStrategy(
+  item: StrategyResult
+): BasicStockView {
+  const score = item.strategyScore;
+  const riskLabel: BasicStockView["riskLabel"] =
+    score >= 75 ? "낮음" : score >= 55 ? "보통" : "높음";
+
+  const aiScore = Math.round(
+    score * 0.6 + (item.companyScore ?? score) * 0.4
+  );
+
+  const styleTags =
+    item.tags.length > 0 ? item.tags.slice(0, 3) : ["대형주"];
+
+  const oneLiner =
+    item.reasons.length > 0
+      ? item.reasons[0]
+      : score >= 80
+        ? "전략 기준 상위 종목으로 평가됩니다."
+        : "전략 조건을 충족하는 종목입니다.";
+
+  return {
+    aiScore,
+    attractiveness: score,
+    riskLabel,
+    styleTags,
+    oneLiner,
+  };
 }
 
 export function riskColor(label: BasicStockView["riskLabel"]): string {
