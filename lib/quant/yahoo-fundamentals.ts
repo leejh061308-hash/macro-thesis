@@ -207,6 +207,88 @@ async function enrichOneFromYahoo(
   }
 }
 
+export async function enrichGrowthFromYahoo(
+  metrics: QuantMetrics[],
+  options?: { concurrency?: number }
+): Promise<void> {
+  const needs = metrics.filter(needsGrowthEnrich);
+  if (needs.length === 0) return;
+
+  const concurrency = options?.concurrency ?? 4;
+  let index = 0;
+
+  async function enrichOneGrowth(m: QuantMetrics): Promise<void> {
+    const encoded = encodeURIComponent(m.ticker);
+    const query = "modules=financialData&formatted=false";
+
+    for (const host of YAHOO_HOSTS) {
+      try {
+        const response = await withTimeout(
+          fetchYahoo(`${host}/v10/finance/quoteSummary/${encoded}?${query}`, {
+            headers: {
+              "User-Agent": YAHOO_USER_AGENT,
+              Accept: "application/json",
+            },
+            cache: "no-store",
+          }),
+          YAHOO_TIMEOUT,
+          "yahoo growth financialData"
+        );
+        if (!response.ok) continue;
+
+        const json = (await response.json()) as DirectQuoteSummaryResult;
+        const fd = json.quoteSummary?.result?.[0]?.financialData;
+        if (!fd) continue;
+
+        if (m.revenueGrowth == null) m.revenueGrowth = pct(fd.revenueGrowth);
+        if (m.epsGrowth == null) m.epsGrowth = pct(fd.earningsGrowth);
+        if (m.operatingMargin == null) {
+          m.operatingMargin = pct(fd.operatingMargins);
+        }
+        if (!needsGrowthEnrich(m)) return;
+      } catch {
+        // try next host
+      }
+    }
+
+    if (needsGrowthEnrich(m)) {
+      try {
+        const summary = await withTimeout(
+          yahooFinance.quoteSummary(m.ticker, { modules: ["financialData"] }),
+          YAHOO_TIMEOUT,
+          "yahoo growth library"
+        );
+        if (m.revenueGrowth == null) {
+          m.revenueGrowth = pct(summary.financialData?.revenueGrowth);
+        }
+        if (m.epsGrowth == null) {
+          m.epsGrowth = pct(summary.financialData?.earningsGrowth);
+        }
+        if (m.operatingMargin == null) {
+          m.operatingMargin = pct(summary.financialData?.operatingMargins);
+        }
+      } catch {
+        // library 실패
+      }
+    }
+  }
+
+  async function worker() {
+    while (index < needs.length) {
+      const i = index++;
+      try {
+        await enrichOneGrowth(needs[i]);
+      } catch {
+        // 개별 종목 실패는 무 ignore
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, needs.length) }, worker)
+  );
+}
+
 export interface EnrichFundamentalsOptions {
   /** stock detail fallback 생략 (백그라운드 full enrich용) */
   skipDetailFallback?: boolean;

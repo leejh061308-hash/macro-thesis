@@ -33,6 +33,18 @@ export function isUniverseGrowthSparse(metrics: QuantMetrics[]): boolean {
   return growthCoverage(metrics) < MIN_GROWTH_COVERAGE;
 }
 
+/** 성장주 적합도만 0이고 다른 전략은 살아 있는 stale overview */
+export function isGrowthOverviewStale(
+  overviews: Array<{ id?: string; suitabilityScore: number }>
+): boolean {
+  const growth = overviews.find((o) => o.id === "growth");
+  if (!growth || growth.suitabilityScore > 0) return false;
+  const othersAlive = overviews.filter(
+    (o) => o.id !== "growth" && o.suitabilityScore > 0
+  ).length;
+  return othersAlive >= 2;
+}
+
 /** 전략 적합도가 사실상 계산되지 않은 상태 (모멘텀만 살아 있음) */
 export function isOverviewLikelyStale(
   overviews: Array<{ suitabilityScore: number }>

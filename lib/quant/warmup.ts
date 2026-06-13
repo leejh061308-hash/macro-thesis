@@ -1,10 +1,10 @@
 import { getCached } from "./cache";
-import { getStrategyOverviews } from "./service";
+import { getScoringUniverseMetrics, getStrategyOverviews } from "./service";
 import { getStrategyEntryEnvironments } from "@/lib/timing/service";
 
 export type QuantCacheStatus = "ready" | "warming" | "cold";
 
-const OVERVIEW_CACHE_KEY = "strategy-overview-v7";
+const OVERVIEW_CACHE_KEY = "strategy-overview-v8";
 
 let warmInFlight: Promise<void> | null = null;
 
@@ -22,7 +22,8 @@ export function ensureQuantCacheWarm(): Promise<void> {
   }
 
   if (!warmInFlight) {
-    warmInFlight = getStrategyOverviews({ includeEntry: false })
+    warmInFlight = getScoringUniverseMetrics()
+      .then(() => getStrategyOverviews({ includeEntry: false }))
       .then(() => getStrategyEntryEnvironments())
       .then(() => undefined)
       .finally(() => {
