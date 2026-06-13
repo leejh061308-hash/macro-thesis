@@ -1,5 +1,6 @@
 import { getCached } from "./cache";
 import { getStrategyOverviews } from "./service";
+import { getStrategyEntryEnvironments } from "@/lib/timing/service";
 
 export type QuantCacheStatus = "ready" | "warming" | "cold";
 
@@ -22,6 +23,7 @@ export function ensureQuantCacheWarm(): Promise<void> {
 
   if (!warmInFlight) {
     warmInFlight = getStrategyOverviews({ includeEntry: false })
+      .then(() => getStrategyEntryEnvironments())
       .then(() => undefined)
       .finally(() => {
         warmInFlight = null;

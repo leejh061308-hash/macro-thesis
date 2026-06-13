@@ -31,40 +31,48 @@ export default function StrategyOverviewPanel({
 
     async function load() {
       try {
-        const overviewPromise = fetch(
+        const overviewRes = await fetch(
           "/api/quant/strategies/overview?quick=1",
           { cache: "no-store", signal: controller.signal }
-        ).then((res) => res.json());
-
-        const entryPromise = fetch("/api/timing/strategy-environment", {
-          cache: "no-store",
-          signal: controller.signal,
-        }).then((res) => res.json());
-
-        const overviewData = await overviewPromise;
+        );
+        const overviewData = await overviewRes.json();
         if (cancelled) return;
         if (overviewData.error) throw new Error(overviewData.error);
 
         setStrategies(overviewData.strategies ?? []);
         setLoading(false);
 
-        const entryData = await entryPromise;
+        const entryRes = await fetch("/api/timing/strategy-environment", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const entryData = await entryRes.json();
         if (cancelled) return;
 
         const environments = entryData.environments ?? [];
-        setStrategies((prev) =>
-          prev.map((s) => {
-            const env = environments.find(
-              (e: { strategyId: string }) => e.strategyId === s.id
-            );
-            if (!env) return s;
-            return {
-              ...s,
-              entryScore: env.entryScore,
-              entryLabel: env.entryLabel,
-            };
-          })
-        );
+        const entryLooksStale =
+          environments.length === 0 ||
+          (environments.every(
+            (e: { entryScore: number }) => e.entryScore === 50
+          ) &&
+            new Set(environments.map((e: { entryScore: number }) => e.entryScore))
+              .size <= 1);
+
+        if (!entryLooksStale) {
+          setStrategies((prev) =>
+            prev.map((s) => {
+              const env = environments.find(
+                (e: { strategyId: string }) => e.strategyId === s.id
+              );
+              if (!env) return s;
+              return {
+                ...s,
+                entryScore: env.entryScore,
+                entryLabel: env.entryLabel,
+              };
+            })
+          );
+        }
       } catch (e) {
         if (cancelled) return;
         if (e instanceof Error && e.name === "AbortError") {

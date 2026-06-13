@@ -21,3 +21,13 @@ export function isOverviewLikelyStale(
   const nonZero = overviews.filter((o) => o.suitabilityScore > 0).length;
   return nonZero <= 1;
 }
+
+/** 진입 환경이 기본값 50으로만 채워진 stale 캐시 */
+export function isEntryEnvLikelyStale(
+  environments: Array<{ entryScore: number }>
+): boolean {
+  if (environments.length === 0) return true;
+  const allFifty = environments.every((e) => e.entryScore === 50);
+  const unique = new Set(environments.map((e) => e.entryScore));
+  return allFifty || unique.size <= 1;
+}

@@ -3,7 +3,8 @@ import {
   setCached,
 } from "@/lib/quant/cache";
 import { fetchTickerMetrics, fetchUniverseMetrics } from "@/lib/quant/metrics-service";
-import { getUniverseMetrics } from "@/lib/quant/service";
+import { getScoringUniverseMetrics, getUniverseMetrics } from "@/lib/quant/service";
+import { isEntryEnvLikelyStale } from "@/lib/quant/universe-health";
 import type { QuantMetrics } from "@/lib/quant/types";
 import { BASIC_STYLE_STRATEGY_IDS } from "@/lib/quant/constants";
 import { rankByStrategyFactor } from "@/lib/quant/strategy-factors";
@@ -192,12 +193,13 @@ export async function getStrategyEntryEnvironments(
   universeOverride?: QuantMetrics[],
   options?: { tickersPerStrategy?: number }
 ): Promise<StrategyEntryEnvironment[]> {
-  const cacheKey = "timing:strategy-env-v4";
+  const cacheKey = "timing:strategy-env-v5";
   const cached = getCached<StrategyEntryEnvironment[]>(cacheKey);
-  if (cached?.length) return cached;
+  if (cached?.length && !isEntryEnvLikelyStale(cached)) return cached;
 
-  const universe = universeOverride ?? (await getUniverseMetrics());
-  const perStrategy = options?.tickersPerStrategy ?? 3;
+  const universe =
+    universeOverride ?? (await getScoringUniverseMetrics());
+  const perStrategy = options?.tickersPerStrategy ?? 4;
 
   const results = await Promise.all(
     BASIC_STYLE_STRATEGY_IDS.map(async (strategyId) => {
@@ -236,7 +238,7 @@ export async function getStrategyEntryEnvironments(
     })
   );
 
-  if (results.length > 0) {
+  if (results.length > 0 && !isEntryEnvLikelyStale(results)) {
     setCached(cacheKey, results, TIMING_CACHE_TTL);
   }
   return results;

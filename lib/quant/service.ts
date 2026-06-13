@@ -13,6 +13,7 @@ import { getScoringTickerList, selectScoringUniverse } from "./scoring-universe"
 import { enrichFundamentalsFromYahoo } from "./yahoo-fundamentals";
 import {
   fundamentalCoverage,
+  isEntryEnvLikelyStale,
   isOverviewLikelyStale,
   isUniverseFundamentallySparse,
 } from "./universe-health";
@@ -166,12 +167,17 @@ export async function getStrategyOverviews(options?: {
 }): Promise<StrategyOverviewItem[]> {
   const includeEntry = options?.includeEntry !== false;
   const cached = getCached<StrategyOverviewItem[]>(OVERVIEW_CACHE_KEY);
-  if (
-    cached?.length &&
-    !isOverviewLikelyStale(cached) &&
-    (!includeEntry || cached.every((o) => o.entryScore > 0))
-  ) {
-    return cached;
+  if (cached?.length && !isOverviewLikelyStale(cached)) {
+    if (!includeEntry) {
+      return cached.map((o) => ({
+        ...o,
+        entryScore: isEntryEnvLikelyStale(cached) ? -1 : o.entryScore,
+        entryLabel: isEntryEnvLikelyStale(cached) ? "…" : o.entryLabel,
+      }));
+    }
+    if (!isEntryEnvLikelyStale(cached)) {
+      return cached;
+    }
   }
 
   const universe = await getScoringUniverseMetrics();
@@ -187,11 +193,12 @@ export async function getStrategyOverviews(options?: {
 
   const entryCached = getCached<
     Awaited<ReturnType<typeof getStrategyEntryEnvironments>>
-  >("timing:strategy-env-v4");
+  >("timing:strategy-env-v5");
 
-  const environments = entryCached?.length
-    ? entryCached
-    : await getStrategyEntryEnvironments(universe);
+  const environments =
+    entryCached?.length && !isEntryEnvLikelyStale(entryCached)
+      ? entryCached
+      : await getStrategyEntryEnvironments(universe);
 
   const merged = overviews.map((o) => {
     const env = environments.find((e) => e.strategyId === o.id);
@@ -207,6 +214,7 @@ export async function getStrategyOverviews(options?: {
   if (
     merged.length > 0 &&
     !isOverviewLikelyStale(merged) &&
+    (!includeEntry || !isEntryEnvLikelyStale(merged)) &&
     coverage >= 0.15
   ) {
     setCached(OVERVIEW_CACHE_KEY, merged, METRICS_CACHE_TTL);
