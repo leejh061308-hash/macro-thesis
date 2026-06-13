@@ -16,6 +16,7 @@ import {
   isEntryEnvLikelyStale,
   isOverviewLikelyStale,
   isUniverseFundamentallySparse,
+  isUniverseGrowthSparse,
 } from "./universe-health";
 import {
   computeStrategyScore,
@@ -70,7 +71,7 @@ import type {
 
 const DEFAULT_PORTFOLIO_SIZE = 20;
 
-const UNIVERSE_CACHE_VERSION = "v7";
+const UNIVERSE_CACHE_VERSION = "v8";
 const SCORING_CACHE_KEY = `scoring-metrics-${UNIVERSE_CACHE_VERSION}`;
 const OVERVIEW_CACHE_KEY = "strategy-overview-v6";
 
@@ -116,7 +117,11 @@ async function enrichFullUniverse(universeId: UniverseId = "combined"): Promise<
 /** 기본 탭·전략 카드용 — 대형주 50종목만 빠르게 준비 */
 export async function getScoringUniverseMetrics(): Promise<QuantMetrics[]> {
   let cached = getCached<QuantMetrics[]>(SCORING_CACHE_KEY);
-  if (cached?.length && !isUniverseFundamentallySparse(cached)) {
+  if (
+    cached?.length &&
+    !isUniverseFundamentallySparse(cached) &&
+    !isUniverseGrowthSparse(cached)
+  ) {
     triggerFullUniverseBackground();
     return cached;
   }
@@ -129,7 +134,7 @@ export async function getScoringUniverseMetrics(): Promise<QuantMetrics[]> {
 
   await enrichScoringPool(metrics);
 
-  if (!isUniverseFundamentallySparse(metrics)) {
+  if (!isUniverseFundamentallySparse(metrics) && !isUniverseGrowthSparse(metrics)) {
     setCached(SCORING_CACHE_KEY, metrics, METRICS_CACHE_TTL);
   }
 

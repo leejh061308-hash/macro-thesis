@@ -36,11 +36,17 @@ function pct(v: unknown): number | null {
 
 export function needsFundamentalEnrich(m: QuantMetrics): boolean {
   return (
-    m.peRatio == null &&
-    m.pbRatio == null &&
-    m.roe == null &&
-    m.revenueGrowth == null
+    m.peRatio == null ||
+    m.pbRatio == null ||
+    m.roe == null ||
+    m.revenueGrowth == null ||
+    m.epsGrowth == null ||
+    m.operatingMargin == null
   );
+}
+
+export function needsGrowthEnrich(m: QuantMetrics): boolean {
+  return m.revenueGrowth == null && m.epsGrowth == null;
 }
 
 function applyFromQuoteSummary(
