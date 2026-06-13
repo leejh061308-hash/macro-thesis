@@ -56,6 +56,12 @@ import {
   computeAllStrategyOverviews,
   type StrategyOverviewItem,
 } from "./strategy-overview";
+import {
+  buildMarketAnalytics,
+  PORTFOLIO_PRESETS,
+  type PortfolioPreset,
+  type RotationWindow,
+} from "./market-analytics";
 import { getStrategyEntryEnvironments } from "@/lib/timing/service";
 import { getTimingLabel } from "@/lib/timing/labels";
 import type {
@@ -338,6 +344,35 @@ export async function getFactorDetail(
 ) {
   const universe = await getUniverseMetrics(universeId);
   return getStockFactorDetail(ticker, universe, weights);
+}
+
+export async function getMarketAnalytics(
+  rotationWindow: RotationWindow = "3m",
+  universeId: UniverseId = "combined"
+) {
+  const universe = await getUniverseMetrics(universeId);
+  return buildMarketAnalytics(universe, rotationWindow);
+}
+
+export async function getPortfolioFromPreset(
+  presetId: PortfolioPreset["id"],
+  universeId: UniverseId = "combined",
+  limit = 20
+) {
+  const preset = PORTFOLIO_PRESETS.find((p) => p.id === presetId);
+  if (!preset) return null;
+
+  const universe = await getUniverseMetrics(universeId);
+  const entries = buildUniverseRanking(universe, preset.weights, limit);
+
+  return {
+    preset,
+    entries,
+    weights: preset.weights,
+    universe: universeId,
+    universeSize: universe.length,
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 export async function getStrategyResults(

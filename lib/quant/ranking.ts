@@ -1,5 +1,6 @@
 import { ALL_FACTOR_IDS, computeAllFactorScores } from "./factors";
 import { buildAiFactorSummary, computeMultiFactorScore } from "./multi-factor";
+import { computeFactorContribution } from "./factor-contribution";
 import type {
   FactorId,
   FactorRanks,
@@ -155,10 +156,23 @@ export function getStockFactorDetail(
     beta: m.beta,
   };
 
-  if (entry) return { ...entry, metrics };
+  const w = weights ?? {
+    value: 20,
+    quality: 20,
+    growth: 20,
+    momentum: 20,
+    stability: 20,
+  };
+
+  if (entry) {
+    return {
+      ...entry,
+      metrics,
+      contribution: computeFactorContribution(entry.factors, w),
+    };
+  }
 
   const factors = computeAllFactorScores(m, universe);
-  const w = weights ?? { value: 20, quality: 20, growth: 20, momentum: 20, stability: 20 };
   const overallScore = computeMultiFactorScore(m, universe, w);
 
   return {
@@ -170,5 +184,6 @@ export function getStockFactorDetail(
     overallRank: 0,
     aiSummary: buildAiFactorSummary(factors, overallScore),
     metrics,
+    contribution: computeFactorContribution(factors, w),
   };
 }
