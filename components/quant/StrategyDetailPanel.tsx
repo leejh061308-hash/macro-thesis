@@ -160,7 +160,10 @@ export default function StrategyDetailPanel({
           </div>
 
           <div className="space-y-2">
-            <h4 className="text-sm font-semibold text-white">추천 종목 TOP 10</h4>
+            <h4 className="text-sm font-semibold text-white">전략 순위 TOP 10</h4>
+            <p className="text-[10px] text-neutral">
+              유니버스 내 상대 순위이며, 매수·매도 추천이 아닙니다.
+            </p>
             <div className="space-y-2">
               {results.map((item) => {
                 const risk = deriveRiskFromScores(

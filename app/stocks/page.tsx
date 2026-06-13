@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import RefreshStatus from "@/components/stocks/RefreshStatus";
 import StockCard from "@/components/stocks/StockCard";
+import WarmupTrigger from "@/components/quant/WarmupTrigger";
 import TodaysOpportunities from "@/components/timing/TodaysOpportunities";
 import WatchlistTimingSection from "@/components/timing/WatchlistTimingSection";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
@@ -200,6 +201,7 @@ export default function StocksPage() {
 
   return (
     <div className="space-y-4">
+      <WarmupTrigger />
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-bold text-white">관심종목</h2>

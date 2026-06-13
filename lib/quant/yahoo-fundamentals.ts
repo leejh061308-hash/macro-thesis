@@ -14,7 +14,7 @@ const yahooFinance = new YahooFinance({
 });
 
 const YAHOO_TIMEOUT = 12_000;
-const ENRICH_CONCURRENCY = 4;
+const ENRICH_CONCURRENCY = 6;
 
 function num(v: unknown): number | null {
   if (typeof v !== "number" || !Number.isFinite(v)) return null;

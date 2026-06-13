@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import ResearchDisclaimer from "@/components/layout/ResearchDisclaimer";
 import type { TimingOpportunity } from "@/lib/timing/types";
 
 export default function TodaysOpportunities() {
@@ -55,6 +56,7 @@ export default function TodaysOpportunities() {
           </Link>
         ))}
       </div>
+      <ResearchDisclaimer variant="timing" className="mt-3" />
     </div>
   );
 }

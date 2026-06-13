@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import QuantLoadingState from "./QuantLoadingState";
 import {
   statusColor,
   type StrategyOverviewItem,
@@ -19,16 +20,38 @@ export default function StrategyOverviewPanel({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/quant/strategies/overview", { cache: "no-store" })
+    fetch("/api/quant/warmup", { method: "GET", cache: "no-store" }).catch(
+      () => {}
+    );
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 180_000);
+
+    fetch("/api/quant/strategies/overview", {
+      cache: "no-store",
+      signal: controller.signal,
+    })
       .then((res) => res.json())
       .then((data) => {
         if (data.error) throw new Error(data.error);
         setStrategies(data.strategies ?? []);
       })
       .catch((e) => {
+        if (e instanceof Error && e.name === "AbortError") {
+          setError("데이터 준비 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.");
+          return;
+        }
         setError(e instanceof Error ? e.message : "로드 실패");
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        clearTimeout(timeout);
+        setLoading(false);
+      });
+
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
   }, []);
 
   return (
@@ -36,18 +59,23 @@ export default function StrategyOverviewPanel({
       <div>
         <h3 className="text-sm font-bold text-white">투자 전략</h3>
         <p className="text-[10px] text-neutral">
-          현재 어떤 전략이 유리한지 확인하세요
+          현재 어떤 스타일이 유리한지 상대 순위로 확인하세요
         </p>
       </div>
 
       {loading ? (
-        <div className="grid gap-2 sm:grid-cols-2">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-32 animate-pulse rounded-xl bg-surface-border/40" />
-          ))}
-        </div>
+        <QuantLoadingState />
       ) : error ? (
-        <p className="text-sm text-bearish">{error}</p>
+        <div className="space-y-2">
+          <p className="text-sm text-bearish">{error}</p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="text-xs text-accent underline-offset-2 hover:underline"
+          >
+            다시 시도
+          </button>
+        </div>
       ) : (
         <div className="grid gap-2 sm:grid-cols-2">
           {strategies.map((s) => (

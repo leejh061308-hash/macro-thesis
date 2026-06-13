@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import ResearchDisclaimer from "@/components/layout/ResearchDisclaimer";
 import BacktestChart from "./BacktestChart";
 import BacktestStatsGrid from "./BacktestStatsGrid";
 import type {
@@ -195,6 +196,7 @@ export default function BacktestPanel({
               </p>
             </div>
           ) : null}
+          <ResearchDisclaimer variant="backtest" className="mt-2" />
         </div>
       ) : null}
     </div>

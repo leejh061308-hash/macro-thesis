@@ -15,7 +15,11 @@ import type {
   UniverseId,
 } from "@/lib/quant/types";
 
-export default function QuantPanel() {
+export default function QuantPanel({
+  onHelpClick,
+}: {
+  onHelpClick?: () => void;
+}) {
   const { mode, setMode, hydrated } = useQuantViewMode();
   const [selectedStrategyId, setSelectedStrategyId] = useState<StrategyId | null>(
     null
@@ -30,14 +34,14 @@ export default function QuantPanel() {
   });
   const [universeId, setUniverseId] = useState<UniverseId>("combined");
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
-  const [metricsWarning, setMetricsWarning] = useState(false);
+  const [finnhubConfigured, setFinnhubConfigured] = useState(true);
 
   const { favorites, toggleTicker } = useQuantFavorites();
 
   useEffect(() => {
     fetch("/api/quant/strategies/overview")
       .then((res) => res.json())
-      .then((data) => setMetricsWarning(!data.metricsAvailable))
+      .then((data) => setFinnhubConfigured(data.metricsAvailable !== false))
       .catch(() => {});
   }, []);
 
@@ -53,12 +57,21 @@ export default function QuantPanel() {
 
   return (
     <div className="space-y-4">
-      <ViewModeToggle mode={mode} onChange={setMode} />
+      <div className="flex items-center justify-between gap-2">
+        <ViewModeToggle mode={mode} onChange={setMode} />
+        <button
+          type="button"
+          onClick={onHelpClick}
+          className="shrink-0 text-[10px] text-neutral underline-offset-2 hover:text-gray-300 hover:underline"
+        >
+          도움말
+        </button>
+      </div>
 
-      {metricsWarning && (
-        <div className="rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-[11px] text-accent">
-          FINNHUB_API_KEY가 설정되지 않았습니다. Railway/서버 환경 변수를
-          확인해주세요.
+      {!finnhubConfigured && (
+        <div className="rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-[11px] text-neutral">
+          Finnhub API 키가 없어 Yahoo Finance로 재무 데이터를 보완합니다. 일부
+          지표가 누락될 수 있습니다.
         </div>
       )}
 
