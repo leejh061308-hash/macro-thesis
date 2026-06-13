@@ -52,4 +52,4 @@ export interface StrategyEntryEnvironment {
   entryLabel: string;
 }
 
-export type TimingHistoryPeriod = "6m" | "1y";
+export type TimingHistoryPeriod = "1m" | "3m" | "6m" | "1y";

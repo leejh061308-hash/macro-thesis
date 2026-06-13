@@ -14,11 +14,7 @@ import {
   computeTimingFromCloses,
 } from "./calculator";
 import { fetchDailyCloses } from "./technical";
-import {
-  getCompanyLabel,
-  getEntryEnvironmentLabel,
-  getTimingLabel,
-} from "./labels";
+import { getCompanyLabel, getTimingLabel } from "./labels";
 import type {
   StrategyEntryEnvironment,
   TimingHistoryPeriod,
@@ -80,6 +76,16 @@ export async function getTimingScore(
   return result;
 }
 
+const HISTORY_CONFIG: Record<
+  TimingHistoryPeriod,
+  { range: "1mo" | "3mo" | "6mo" | "1y"; minIdx: number; step: number }
+> = {
+  "1m": { range: "3mo", minIdx: 25, step: 2 },
+  "3m": { range: "6mo", minIdx: 40, step: 3 },
+  "6m": { range: "6mo", minIdx: 60, step: 5 },
+  "1y": { range: "1y", minIdx: 80, step: 7 },
+};
+
 export async function getTimingHistory(
   ticker: string,
   period: TimingHistoryPeriod
@@ -87,15 +93,13 @@ export async function getTimingHistory(
   const metrics = await fetchTickerMetrics(ticker);
   if (!metrics) return [];
 
-  const range = period === "6m" ? "6mo" : "1y";
-  const closes = await fetchDailyCloses(ticker, range);
-  if (closes.length < 40) return [];
+  const config = HISTORY_CONFIG[period];
+  const closes = await fetchDailyCloses(ticker, config.range);
+  if (closes.length < config.minIdx + 5) return [];
 
-  const step = period === "6m" ? 5 : 7;
-  const minIdx = period === "6m" ? 60 : 80;
   const points: TimingHistoryPoint[] = [];
 
-  for (let i = minIdx; i < closes.length; i += step) {
+  for (let i = config.minIdx; i < closes.length; i += config.step) {
     const { score } = computeTimingFromCloses(metrics, closes, i);
     points.push({
       date: new Date(closes[i].timestamp).toLocaleDateString("ko-KR", {
@@ -123,7 +127,7 @@ export async function getTodaysOpportunities(
   if (cached) return cached;
 
   const universe = await getUniverseMetrics();
-  const tickers = universe.slice(0, 40).map((m) => m.ticker);
+  const tickers = universe.slice(0, 60).map((m) => m.ticker);
   const opportunities: TimingOpportunity[] = [];
 
   for (const ticker of tickers) {
@@ -209,12 +213,13 @@ export async function getStrategyEntryEnvironments(): Promise<
     }
 
     const entryScore = count > 0 ? Math.round(sum / count) : 50;
+    const { label: entryLabel } = getTimingLabel(entryScore);
     results.push({
       strategyId: strategy.id,
       strategyName: strategy.name,
       shortName: strategy.shortName,
       entryScore,
-      entryLabel: getEntryEnvironmentLabel(entryScore),
+      entryLabel,
     });
   }
 

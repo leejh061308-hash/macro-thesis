@@ -6,9 +6,14 @@ import type { TimingBreakdown, TimingScoreResult } from "@/lib/timing/types";
 interface TimingPanelProps {
   ticker: string;
   timing: TimingScoreResult;
+  showBreakdown?: boolean;
 }
 
-export default function TimingPanel({ ticker, timing }: TimingPanelProps) {
+export default function TimingPanel({
+  ticker,
+  timing,
+  showBreakdown = true,
+}: TimingPanelProps) {
   const [aiInterpretation, setAiInterpretation] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
 
@@ -33,10 +38,10 @@ export default function TimingPanel({ ticker, timing }: TimingPanelProps) {
 
   return (
     <div className="space-y-3">
-      <BreakdownGrid breakdown={timing.breakdown} />
+      {showBreakdown && <BreakdownGrid breakdown={timing.breakdown} />}
 
       <div className="rounded-xl border border-accent/20 bg-accent/5 p-4">
-        <p className="text-[11px] font-semibold text-accent mb-1.5">해석</p>
+        <p className="text-[11px] font-semibold text-accent mb-1.5">AI 진입 분석</p>
         <p className="text-xs leading-relaxed text-gray-300">
           {aiInterpretation ?? timing.interpretation}
         </p>
@@ -65,11 +70,10 @@ export default function TimingPanel({ ticker, timing }: TimingPanelProps) {
 
 function BreakdownGrid({ breakdown }: { breakdown: TimingBreakdown }) {
   const items = [
-    { label: "밸류에이션", value: breakdown.valuation, weight: "30%" },
-    { label: "모멘텀", value: breakdown.momentum, weight: "25%" },
+    { label: "밸류에이션", value: breakdown.valuation, weight: "40%" },
+    { label: "모멘텀", value: breakdown.momentum, weight: "30%" },
     { label: "과열도", value: breakdown.overheating, weight: "20%" },
-    { label: "변동성", value: breakdown.volatility, weight: "10%" },
-    { label: "거시 적합성", value: breakdown.macro, weight: "15%" },
+    { label: "거시경제 적합도", value: breakdown.macro, weight: "10%" },
   ];
 
   return (

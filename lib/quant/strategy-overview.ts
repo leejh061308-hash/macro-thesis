@@ -13,6 +13,8 @@ export interface StrategyOverviewItem {
   suitabilityScore: number;
   statusLabel: StrategyStatus;
   marketInsight: string;
+  entryScore: number;
+  entryLabel: string;
 }
 
 function statusFromScore(score: number): StrategyStatus {
@@ -96,6 +98,8 @@ export function computeStrategyOverview(
     suitabilityScore,
     statusLabel,
     marketInsight: buildMarketInsight(strategyId, suitabilityScore, statusLabel),
+    entryScore: 0,
+    entryLabel: "—",
   };
 }
 
@@ -109,13 +113,24 @@ export function computeAllStrategyOverviews(
 
 export function buildStrategyAiExplanation(
   overview: StrategyOverviewItem,
-  topTickers: string[]
+  topTickers: string[] = []
 ): string {
-  const picks = topTickers.slice(0, 4).join(", ");
-  if (overview.statusLabel === "강세") {
-    return `최근 ${overview.shortName} 성격의 종목들이 우세한 시장 환경입니다. ${picks}${topTickers.length > 4 ? " 등" : ""}이(가) 대표 추천 종목입니다.`;
+  const { suitabilityScore, entryScore, shortName, statusLabel } = overview;
+
+  if (statusLabel === "강세" && entryScore >= 75) {
+    return `${shortName} 전략이 강세를 보이고 있으며 진입 환경도 우호적인 상태입니다.`;
   }
-  return `${overview.marketInsight} ${picks ? `추천 종목: ${picks}.` : ""}`;
+  if (suitabilityScore >= 70 && entryScore < 65) {
+    return `저평가 기업은 많지만 시장의 관심은 다른 스타일에 집중되고 있습니다.`;
+  }
+  if (entryScore >= 80 && statusLabel !== "강세") {
+    return `전략 적합도는 보통이나, 추천 종목의 진입 환경은 양호한 편입니다.`;
+  }
+  if (statusLabel === "강세") {
+    const picks = topTickers.slice(0, 3).join(", ");
+    return `최근 ${shortName} 성격의 종목들이 우세한 시장 환경입니다.${picks ? ` ${picks} 등이 대표 추천 종목입니다.` : ""}`;
+  }
+  return `${overview.marketInsight}`;
 }
 
 export function statusColor(status: StrategyStatus): string {

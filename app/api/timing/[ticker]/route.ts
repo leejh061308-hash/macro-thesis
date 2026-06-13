@@ -30,7 +30,7 @@ export async function GET(
     }
 
     const history =
-      period === "6m" || period === "1y"
+      period === "1m" || period === "3m" || period === "6m" || period === "1y"
         ? await getTimingHistory(ticker, period)
         : undefined;
 

@@ -2,10 +2,15 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import ScoreCards from "@/components/timing/ScoreCards";
+import TimingHistoryChart from "@/components/timing/TimingHistoryChart";
+import TimingPanel from "@/components/timing/TimingPanel";
 import {
   deriveBasicStockViewFromStrategy,
+  deriveRiskFromScores,
   riskColor,
 } from "@/lib/quant/basic-view";
+import type { TimingScoreResult } from "@/lib/timing/types";
 import type { StrategyId, StrategyResult } from "@/lib/quant/types";
 
 interface BasicStockDetailProps {
@@ -20,25 +25,40 @@ export default function BasicStockDetail({
   onClose,
 }: BasicStockDetailProps) {
   const [item, setItem] = useState<StrategyResult | null>(null);
+  const [timing, setTiming] = useState<TimingScoreResult | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/quant/strategies/${strategyId}?limit=50`, { cache: "no-store" })
-      .then((res) => res.json())
-      .then((data) => {
-        const found = (data.results as StrategyResult[] | undefined)?.find(
+    Promise.all([
+      fetch(`/api/quant/strategies/${strategyId}?limit=50`, {
+        cache: "no-store",
+      }).then((r) => r.json()),
+      fetch(`/api/timing/${encodeURIComponent(ticker)}`, { cache: "no-store" }).then(
+        (r) => r.json()
+      ),
+    ])
+      .then(([strategyData, timingData]) => {
+        const found = (strategyData.results as StrategyResult[] | undefined)?.find(
           (r) => r.ticker === ticker
         );
         setItem(found ?? null);
+        setTiming(timingData.timing ?? null);
       })
-      .catch(() => setItem(null))
+      .catch(() => {
+        setItem(null);
+        setTiming(null);
+      })
       .finally(() => setLoading(false));
   }, [ticker, strategyId]);
 
   if (!ticker) return null;
 
   const basic = item ? deriveBasicStockViewFromStrategy(item) : null;
+  const riskLabel = deriveRiskFromScores(
+    timing?.companyScore ?? item?.companyScore ?? null,
+    timing?.timingScore ?? item?.timingScore ?? null
+  );
 
   return (
     <div className="rounded-xl border border-accent/30 bg-surface-card p-4 card-glow">
@@ -62,59 +82,60 @@ export default function BasicStockDetail({
         </button>
       </div>
 
-      {basic && item && !loading && (
+      {loading ? (
+        <div className="mt-4 h-28 animate-pulse rounded-xl bg-surface-border/40" />
+      ) : timing ? (
         <div className="mt-4 space-y-4">
-          <div className="grid grid-cols-3 gap-3">
-            <Metric label="AI 추천도" value={String(basic.aiScore)} highlight />
-            <Metric label="투자 매력도" value={String(basic.attractiveness)} />
+          <ScoreCards timing={timing} />
+
+          <div className="rounded-lg border border-surface-border px-3 py-2">
+            <p className="text-[10px] text-neutral">위험도</p>
+            <p className={`text-sm font-semibold ${riskColor(riskLabel)}`}>
+              {riskLabel}
+            </p>
+          </div>
+
+          {basic && (
             <div>
-              <p className="text-[10px] text-neutral">위험도</p>
-              <p className={`text-lg font-semibold ${riskColor(basic.riskLabel)}`}>
-                {basic.riskLabel}
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <p className="text-[10px] text-neutral">투자 스타일</p>
-            <div className="mt-1 flex flex-wrap gap-1">
-              {basic.styleTags.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full border border-accent/20 bg-accent/10 px-2 py-0.5 text-[10px] text-accent"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-surface-border p-3">
-            <p className="text-[11px] font-semibold text-gray-400 mb-1">한줄 평가</p>
-            <p className="text-sm leading-relaxed text-gray-300">{basic.oneLiner}</p>
-          </div>
-
-          {item.reasons.length > 1 && (
-            <div className="rounded-lg border border-surface-border p-3">
-              <p className="text-[11px] font-semibold text-gray-400 mb-1">추천 이유</p>
-              <ul className="space-y-1">
-                {item.reasons.map((r) => (
-                  <li key={r} className="text-xs text-gray-400">
-                    · {r}
-                  </li>
+              <p className="text-[10px] text-neutral">투자 스타일</p>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {basic.styleTags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full border border-accent/20 bg-accent/10 px-2 py-0.5 text-[10px] text-accent"
+                  >
+                    {tag}
+                  </span>
                 ))}
-              </ul>
+              </div>
             </div>
           )}
 
+          <TimingPanel ticker={ticker} timing={timing} showBreakdown={false} />
+          <TimingHistoryChart ticker={ticker} compact />
+
           <Link
-            href={`/stocks/${encodeURIComponent(item.ticker)}`}
+            href={`/stocks/${encodeURIComponent(ticker)}`}
             className="block w-full rounded-lg border border-surface-border py-2 text-center text-xs text-gray-400 hover:text-accent"
           >
             종목 상세 페이지 →
           </Link>
         </div>
-      )}
+      ) : item && basic ? (
+        <div className="mt-4 space-y-3">
+          <div className="grid grid-cols-3 gap-2">
+            <Metric label="기업 점수" value={String(item.companyScore ?? basic.attractiveness)} />
+            <Metric label="진입 점수" value={String(item.timingScore ?? "—")} highlight />
+            <div>
+              <p className="text-[10px] text-neutral">위험도</p>
+              <p className={`text-sm font-semibold ${riskColor(riskLabel)}`}>
+                {riskLabel}
+              </p>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400">{basic.oneLiner}</p>
+        </div>
+      ) : null}
     </div>
   );
 }

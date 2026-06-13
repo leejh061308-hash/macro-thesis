@@ -8,6 +8,7 @@ import {
   statusColor,
   type StrategyOverviewItem,
 } from "@/lib/quant/strategy-overview";
+import { deriveRiskFromScores, riskColor } from "@/lib/quant/basic-view";
 import { getStrategy } from "@/lib/quant/strategies";
 import type { StrategyId, StrategyResult } from "@/lib/quant/types";
 
@@ -135,19 +136,24 @@ export default function StrategyDetailPanel({
               {strategyDef.description}
             </p>
             {overview && (
-              <div className="mt-4 flex items-baseline justify-between rounded-lg border border-accent/20 bg-accent/5 p-3">
-                <div>
-                  <p className="text-[10px] text-neutral">현재 적합도</p>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="rounded-lg border border-accent/20 bg-accent/5 p-3">
+                  <p className="text-[10px] text-neutral">전략 적합도</p>
                   <p className="font-mono text-2xl font-bold text-accent">
                     {overview.suitabilityScore}
                     <span className="text-sm font-normal text-neutral">점</span>
                   </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] text-neutral">현재 상태</p>
-                  <p className={`text-sm font-semibold ${statusColor(overview.statusLabel)}`}>
+                  <p className={`text-xs font-semibold ${statusColor(overview.statusLabel)}`}>
                     {overview.statusLabel}
                   </p>
+                </div>
+                <div className="rounded-lg border border-surface-border p-3">
+                  <p className="text-[10px] text-neutral">현재 진입 환경</p>
+                  <p className="font-mono text-2xl font-bold text-white">
+                    {overview.entryScore}
+                    <span className="text-sm font-normal text-neutral">점</span>
+                  </p>
+                  <p className="text-xs text-neutral">{overview.entryLabel}</p>
                 </div>
               </div>
             )}
@@ -156,7 +162,12 @@ export default function StrategyDetailPanel({
           <div className="space-y-2">
             <h4 className="text-sm font-semibold text-white">추천 종목 TOP 10</h4>
             <div className="space-y-2">
-              {results.map((item) => (
+              {results.map((item) => {
+                const risk = deriveRiskFromScores(
+                  item.companyScore,
+                  item.timingScore
+                );
+                return (
                 <button
                   key={item.ticker}
                   type="button"
@@ -167,37 +178,52 @@ export default function StrategyDetailPanel({
                       : "border-surface-border bg-surface-card hover:border-accent/20"
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-start justify-between gap-2">
                     <div>
                       <span className="font-mono text-[10px] text-neutral">
                         #{item.rank}
                       </span>
                       <p className="text-sm font-semibold text-white">{item.name}</p>
-                      <p className="text-[10px] text-neutral">{item.ticker}</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-md bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent">
-                        추천 {item.strategyScore}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onToggleFavorite(item.ticker);
-                        }}
-                        className={`text-sm ${favoriteTickers.includes(item.ticker) ? "text-accent" : "text-neutral"}`}
-                      >
-                        {favoriteTickers.includes(item.ticker) ? "★" : "☆"}
-                      </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleFavorite(item.ticker);
+                      }}
+                      className={`text-sm ${favoriteTickers.includes(item.ticker) ? "text-accent" : "text-neutral"}`}
+                    >
+                      {favoriteTickers.includes(item.ticker) ? "★" : "☆"}
+                    </button>
+                  </div>
+                  <div className="mt-2 grid grid-cols-3 gap-2 text-[10px]">
+                    <div>
+                      <p className="text-neutral">기업 점수</p>
+                      <p className="font-mono text-sm font-semibold text-white">
+                        {item.companyScore ?? "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-neutral">진입 점수</p>
+                      <p className="font-mono text-sm font-semibold text-accent">
+                        {item.timingScore ?? "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-neutral">위험도</p>
+                      <p className={`text-sm font-semibold ${riskColor(risk)}`}>
+                        {risk}
+                      </p>
                     </div>
                   </div>
                   {item.reasons.length > 0 && (
                     <p className="mt-2 text-[11px] leading-relaxed text-gray-400 line-clamp-2">
-                      {item.reasons.slice(0, 2).join(" · ")}
+                      {item.reasons[0]}
                     </p>
                   )}
                 </button>
-              ))}
+              );
+              })}
             </div>
           </div>
 

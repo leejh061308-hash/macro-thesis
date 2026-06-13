@@ -24,7 +24,7 @@ export interface DailyClose {
 
 export async function fetchDailyCloses(
   ticker: string,
-  range: "6mo" | "1y" | "2y" = "1y"
+  range: "1mo" | "3mo" | "6mo" | "1y" | "2y" = "1y"
 ): Promise<DailyClose[]> {
   const encoded = encodeURIComponent(ticker);
   const urls = YAHOO_HOSTS.map(

@@ -5,6 +5,7 @@ import AdvancedQuantPanel from "./AdvancedQuantPanel";
 import StrategyDetailPanel from "./StrategyDetailPanel";
 import StrategyOverviewPanel from "./StrategyOverviewPanel";
 import ViewModeToggle from "./ViewModeToggle";
+import TodaysOpportunities from "@/components/timing/TodaysOpportunities";
 import { useQuantFavorites } from "@/hooks/useQuantFavorites";
 import { useQuantViewMode } from "@/hooks/useQuantViewMode";
 import type {
@@ -70,7 +71,10 @@ export default function QuantPanel() {
             onToggleFavorite={toggleTicker}
           />
         ) : (
-          <StrategyOverviewPanel onSelectStrategy={setSelectedStrategyId} />
+          <>
+            <TodaysOpportunities />
+            <StrategyOverviewPanel onSelectStrategy={setSelectedStrategyId} />
+          </>
         )
       ) : (
         <AdvancedQuantPanel

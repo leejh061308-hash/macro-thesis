@@ -163,11 +163,10 @@ export function computeTimingBreakdown(
 
 export function computeTimingScore(breakdown: TimingBreakdown): number {
   return clamp(
-    breakdown.valuation * 0.3 +
-      breakdown.momentum * 0.25 +
+    breakdown.valuation * 0.4 +
+      breakdown.momentum * 0.3 +
       breakdown.overheating * 0.2 +
-      breakdown.volatility * 0.1 +
-      breakdown.macro * 0.15
+      breakdown.macro * 0.1
   );
 }
 

@@ -11,12 +11,23 @@ import {
 } from "recharts";
 import type { TimingHistoryPeriod, TimingHistoryPoint } from "@/lib/timing/types";
 
+const PERIODS: { value: TimingHistoryPeriod; label: string }[] = [
+  { value: "1m", label: "1개월" },
+  { value: "3m", label: "3개월" },
+  { value: "6m", label: "6개월" },
+  { value: "1y", label: "1년" },
+];
+
 interface TimingHistoryChartProps {
   ticker: string;
+  compact?: boolean;
 }
 
-export default function TimingHistoryChart({ ticker }: TimingHistoryChartProps) {
-  const [period, setPeriod] = useState<TimingHistoryPeriod>("6m");
+export default function TimingHistoryChart({
+  ticker,
+  compact = false,
+}: TimingHistoryChartProps) {
+  const [period, setPeriod] = useState<TimingHistoryPeriod>("3m");
   const [data, setData] = useState<TimingHistoryPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -34,27 +45,27 @@ export default function TimingHistoryChart({ ticker }: TimingHistoryChartProps) 
 
   return (
     <div className="rounded-xl border border-surface-border bg-surface-card p-4 card-glow">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <p className="text-xs font-semibold text-gray-300">진입 점수 히스토리</p>
-        <div className="flex gap-1">
-          {(["6m", "1y"] as const).map((p) => (
+        <div className="flex flex-wrap gap-1">
+          {PERIODS.map((p) => (
             <button
-              key={p}
+              key={p.value}
               type="button"
-              onClick={() => setPeriod(p)}
-              className={`rounded-md px-2.5 py-1 text-[10px] font-medium ${
-                period === p
+              onClick={() => setPeriod(p.value)}
+              className={`rounded-md px-2 py-0.5 text-[10px] font-medium ${
+                period === p.value
                   ? "bg-accent/20 text-accent border border-accent/30"
                   : "text-neutral border border-surface-border"
               }`}
             >
-              {p === "6m" ? "6개월" : "1년"}
+              {p.label}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="h-44">
+      <div className={compact ? "h-36" : "h-44"}>
         {loading ? (
           <div className="flex h-full items-center justify-center text-sm text-neutral">
             로딩 중...

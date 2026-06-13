@@ -52,7 +52,7 @@ export default function TimingSection({ ticker }: TimingSectionProps) {
   return (
     <div className="space-y-4">
       <ScoreCards timing={timing} />
-      <TimingPanel ticker={ticker} timing={timing} />
+      <TimingPanel ticker={ticker} timing={timing} showBreakdown={false} />
       <TimingHistoryChart ticker={ticker} />
     </div>
   );

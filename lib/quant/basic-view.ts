@@ -111,6 +111,18 @@ export function deriveBasicStockViewFromStrategy(
   };
 }
 
+export function deriveRiskFromScores(
+  companyScore: number | null,
+  timingScore: number | null
+): BasicStockView["riskLabel"] {
+  const company = companyScore ?? 60;
+  const timing = timingScore ?? 60;
+  const avg = (company + timing) / 2;
+  if (avg >= 78) return "낮음";
+  if (avg >= 58) return "보통";
+  return "높음";
+}
+
 export function riskColor(label: BasicStockView["riskLabel"]): string {
   switch (label) {
     case "낮음":

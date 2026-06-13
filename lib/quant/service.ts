@@ -41,6 +41,8 @@ import {
   computeAllStrategyOverviews,
   type StrategyOverviewItem,
 } from "./strategy-overview";
+import { getStrategyEntryEnvironments } from "@/lib/timing/service";
+import { getTimingLabel } from "@/lib/timing/labels";
 import type {
   BacktestConfig,
   BacktestPeriod,
@@ -80,14 +82,47 @@ export async function getUniverseMetrics(
 }
 
 export async function getStrategyOverviews(): Promise<StrategyOverviewItem[]> {
-  const cacheKey = "strategy-overview-v1";
+  const cacheKey = "strategy-overview-v2";
   const cached = getCached<StrategyOverviewItem[]>(cacheKey);
   if (cached) return cached;
 
   const universe = await getUniverseMetrics();
   const overviews = computeAllStrategyOverviews(universe);
-  setCached(cacheKey, overviews, METRICS_CACHE_TTL);
-  return overviews;
+  const environments = await getStrategyEntryEnvironments();
+
+  const merged = overviews.map((o) => {
+    const env = environments.find((e) => e.strategyId === o.id);
+    const entryScore = env?.entryScore ?? 62;
+    return {
+      ...o,
+      entryScore,
+      entryLabel: env?.entryLabel ?? getTimingLabel(entryScore).label,
+    };
+  });
+
+  setCached(cacheKey, merged, METRICS_CACHE_TTL);
+  return merged;
+}
+
+export async function getStrategyResultsWithTiming(
+  strategyId: StrategyId,
+  limit = 10
+): Promise<StrategyResult[]> {
+  const { getTimingScore } = await import("@/lib/timing/service");
+  const results = await getStrategyResults(strategyId, limit);
+
+  const enriched = await Promise.all(
+    results.map(async (r) => {
+      const timing = await getTimingScore(r.ticker);
+      return {
+        ...r,
+        companyScore: timing?.companyScore ?? r.companyScore,
+        timingScore: timing?.timingScore ?? r.timingScore,
+      };
+    })
+  );
+
+  return enriched;
 }
 
 export async function getRanking(
