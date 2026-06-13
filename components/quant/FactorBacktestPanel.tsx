@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import BacktestChart from "./BacktestChart";
 import BacktestStatsGrid from "./BacktestStatsGrid";
 import ComparePanel from "./ComparePanel";
+import type { QuantViewMode } from "@/lib/quant/basic-view";
 import type {
   BacktestPeriod,
   BacktestResult,
@@ -31,12 +32,14 @@ const REBALANCES: { value: RebalanceFrequency; label: string }[] = [
 const PORTFOLIO_SIZES: PortfolioSize[] = [10, 20, 50, 100];
 
 interface FactorBacktestPanelProps {
+  viewMode: QuantViewMode;
   strategyId: MultiFactorStrategyId | "custom";
   weights: FactorWeights;
   strategyName: string;
 }
 
 export default function FactorBacktestPanel({
+  viewMode,
   strategyId,
   weights,
   strategyName,
@@ -51,6 +54,7 @@ export default function FactorBacktestPanel({
   const [error, setError] = useState<string | null>(null);
   const [interpretation, setInterpretation] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const isBasic = viewMode === "basic";
 
   useEffect(() => {
     setLoading(true);
@@ -134,9 +138,13 @@ export default function FactorBacktestPanel({
   return (
     <div className="space-y-4 rounded-xl border border-surface-border bg-surface-card p-4 card-glow">
       <div>
-        <h3 className="text-sm font-bold text-white">백테스트</h3>
+        <h3 className="text-sm font-bold text-white">
+          {isBasic ? "전략 성과" : "백테스트"}
+        </h3>
         <p className="text-[10px] text-neutral">
-          {strategyName} · Top {portfolioSize} · {REBALANCES.find((r) => r.value === rebalance)?.label} 리밸런싱
+          {isBasic
+            ? `${strategyName} · ${PERIODS.find((p) => p.value === period)?.label} 기준`
+            : `${strategyName} · Top ${portfolioSize} · ${REBALANCES.find((r) => r.value === rebalance)?.label} 리밸런싱`}
         </p>
       </div>
 
@@ -154,57 +162,70 @@ export default function FactorBacktestPanel({
         </div>
       </div>
 
-      <div className="space-y-2">
-        <p className="text-[10px] text-neutral">리밸런싱</p>
-        <div className="flex flex-wrap gap-1">
-          {REBALANCES.map((r) => (
-            <Chip
-              key={r.value}
-              label={r.label}
-              active={rebalance === r.value}
-              onClick={() => setRebalance(r.value)}
-            />
-          ))}
-        </div>
-      </div>
+      {!isBasic && (
+        <>
+          <div className="space-y-2">
+            <p className="text-[10px] text-neutral">리밸런싱</p>
+            <div className="flex flex-wrap gap-1">
+              {REBALANCES.map((r) => (
+                <Chip
+                  key={r.value}
+                  label={r.label}
+                  active={rebalance === r.value}
+                  onClick={() => setRebalance(r.value)}
+                />
+              ))}
+            </div>
+          </div>
 
-      <div className="space-y-2">
-        <p className="text-[10px] text-neutral">종목 수</p>
-        <div className="flex flex-wrap gap-1">
-          {PORTFOLIO_SIZES.map((s) => (
-            <Chip
-              key={s}
-              label={`Top ${s}`}
-              active={portfolioSize === s}
-              onClick={() => setPortfolioSize(s)}
-            />
-          ))}
-        </div>
-      </div>
+          <div className="space-y-2">
+            <p className="text-[10px] text-neutral">종목 수</p>
+            <div className="flex flex-wrap gap-1">
+              {PORTFOLIO_SIZES.map((s) => (
+                <Chip
+                  key={s}
+                  label={`Top ${s}`}
+                  active={portfolioSize === s}
+                  onClick={() => setPortfolioSize(s)}
+                />
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       {loading ? (
         <div className="space-y-2 animate-pulse">
           <div className="h-24 rounded-lg bg-surface-border/40" />
-          <div className="h-48 rounded-lg bg-surface-border/40" />
+          {!isBasic && <div className="h-48 rounded-lg bg-surface-border/40" />}
         </div>
       ) : error ? (
         <p className="text-sm text-bearish">{error}</p>
       ) : backtest ? (
         <div className="space-y-4">
-          <BacktestStatsGrid stats={backtest.stats} />
-          <BacktestChart data={backtest.chart} strategyName={strategyName} />
-          <p className="text-[10px] leading-relaxed text-neutral">
-            {backtest.methodology}
-          </p>
+          {isBasic ? (
+            <BasicBacktestSummary stats={backtest.stats} />
+          ) : (
+            <>
+              <BacktestStatsGrid stats={backtest.stats} mode="advanced" />
+              <BacktestChart data={backtest.chart} strategyName={strategyName} />
+              <p className="text-[10px] leading-relaxed text-neutral">
+                {backtest.methodology}
+              </p>
+            </>
+          )}
+
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={handleCompare}
-              disabled={compareLoading}
-              className="flex-1 rounded-lg border border-surface-border py-2 text-xs font-semibold text-gray-300 disabled:opacity-50"
-            >
-              {compareLoading ? "비교 중..." : "S&P500 · Nasdaq100 비교"}
-            </button>
+            {!isBasic && (
+              <button
+                type="button"
+                onClick={handleCompare}
+                disabled={compareLoading}
+                className="flex-1 rounded-lg border border-surface-border py-2 text-xs font-semibold text-gray-300 disabled:opacity-50"
+              >
+                {compareLoading ? "비교 중..." : "S&P500 · Nasdaq100 비교"}
+              </button>
+            )}
             {!interpretation ? (
               <button
                 type="button"
@@ -231,6 +252,29 @@ export default function FactorBacktestPanel({
           onClose={() => setCompareResult(null)}
         />
       )}
+    </div>
+  );
+}
+
+function BasicBacktestSummary({
+  stats,
+}: {
+  stats: BacktestResult["stats"];
+}) {
+  const sign = stats.excessReturn >= 0 ? "+" : "";
+  return (
+    <div className="rounded-lg border border-accent/20 bg-accent/5 p-4">
+      <div className="flex items-baseline justify-between">
+        <span className="text-xs text-gray-400">누적 수익률</span>
+        <span className="font-mono text-2xl font-bold text-accent">
+          {stats.totalReturn >= 0 ? "+" : ""}
+          {stats.totalReturn.toFixed(1)}%
+        </span>
+      </div>
+      <p className="mt-2 text-xs text-neutral">
+        S&P500 대비 {sign}
+        {stats.excessReturn.toFixed(1)}%
+      </p>
     </div>
   );
 }

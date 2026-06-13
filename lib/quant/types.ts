@@ -78,6 +78,22 @@ export interface RankingEntry {
   aiSummary: string;
 }
 
+export interface StockMetricsSummary {
+  peRatio: number | null;
+  pbRatio: number | null;
+  evToEbitda: number | null;
+  freeCashFlowYield: number | null;
+  roe: number | null;
+  roic: number | null;
+  volatility: number | null;
+  maxDrawdown: number | null;
+  beta: number | null;
+}
+
+export interface StockFactorDetailResponse extends RankingEntry {
+  metrics: StockMetricsSummary;
+}
+
 export interface RankingResponse {
   universe: UniverseId;
   universeSize: number;

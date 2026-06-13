@@ -4,6 +4,7 @@ import type { BacktestStats } from "@/lib/quant/types";
 
 interface BacktestStatsGridProps {
   stats: BacktestStats;
+  mode?: "basic" | "advanced";
 }
 
 function StatCard({
@@ -29,7 +30,10 @@ function StatCard({
   );
 }
 
-export default function BacktestStatsGrid({ stats }: BacktestStatsGridProps) {
+export default function BacktestStatsGrid({
+  stats,
+  mode = "advanced",
+}: BacktestStatsGridProps) {
   const sign = stats.excessReturn >= 0 ? "+" : "";
   return (
     <div className="space-y-3">
@@ -52,29 +56,33 @@ export default function BacktestStatsGrid({ stats }: BacktestStatsGridProps) {
               {stats.excessReturn.toFixed(1)}%
             </span>
           </div>
-          <div className="flex justify-between">
-            <span>
-              Nasdaq100 {stats.nasdaqReturn >= 0 ? "+" : ""}
-              {stats.nasdaqReturn.toFixed(1)}%
-            </span>
-            <span>
-              초과 {stats.excessVsNasdaq >= 0 ? "+" : ""}
-              {stats.excessVsNasdaq.toFixed(1)}%
-            </span>
-          </div>
+          {mode === "advanced" && (
+            <div className="flex justify-between">
+              <span>
+                Nasdaq100 {stats.nasdaqReturn >= 0 ? "+" : ""}
+                {stats.nasdaqReturn.toFixed(1)}%
+              </span>
+              <span>
+                초과 {stats.excessVsNasdaq >= 0 ? "+" : ""}
+                {stats.excessVsNasdaq.toFixed(1)}%
+              </span>
+            </div>
+          )}
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <StatCard label="연평균(CAGR)" value={`${stats.cagr.toFixed(1)}%`} />
-        <StatCard label="최대 낙폭(MDD)" value={`${stats.mdd.toFixed(1)}%`} />
-        <StatCard label="변동성" value={`${stats.volatility.toFixed(1)}%`} />
-        <StatCard label="승률" value={`${stats.winRate.toFixed(0)}%`} />
-        <StatCard
-          label="샤프지수"
-          value={stats.sharpe.toFixed(2)}
-          highlight
-        />
-      </div>
+      {mode === "advanced" && (
+        <div className="grid grid-cols-2 gap-2">
+          <StatCard label="연평균(CAGR)" value={`${stats.cagr.toFixed(1)}%`} />
+          <StatCard label="최대 낙폭(MDD)" value={`${stats.mdd.toFixed(1)}%`} />
+          <StatCard label="변동성" value={`${stats.volatility.toFixed(1)}%`} />
+          <StatCard label="승률" value={`${stats.winRate.toFixed(0)}%`} />
+          <StatCard
+            label="샤프지수"
+            value={stats.sharpe.toFixed(2)}
+            highlight
+          />
+        </div>
+      )}
     </div>
   );
 }

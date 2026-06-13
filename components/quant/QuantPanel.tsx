@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import FactorBacktestPanel from "./FactorBacktestPanel";
 import FactorStrategyPanel from "./FactorStrategyPanel";
 import RankingPanel from "./RankingPanel";
+import ViewModeToggle from "./ViewModeToggle";
 import { useQuantFavorites } from "@/hooks/useQuantFavorites";
+import { useQuantViewMode } from "@/hooks/useQuantViewMode";
 import { MULTI_FACTOR_STRATEGIES } from "@/lib/quant/multi-factor";
 import type {
   FactorWeights,
@@ -13,6 +15,7 @@ import type {
 } from "@/lib/quant/types";
 
 export default function QuantPanel() {
+  const { mode, setMode, hydrated } = useQuantViewMode();
   const [strategyId, setStrategyId] =
     useState<MultiFactorStrategyId | "custom">("all-factor");
   const [weights, setWeights] = useState<FactorWeights>({
@@ -40,8 +43,20 @@ export default function QuantPanel() {
       : (MULTI_FACTOR_STRATEGIES.find((s) => s.id === strategyId)?.name ??
         "All Factor");
 
+  const strategyShortName =
+    strategyId === "custom"
+      ? "커스텀 전략"
+      : (MULTI_FACTOR_STRATEGIES.find((s) => s.id === strategyId)?.shortName ??
+        "올팩터");
+
+  if (!hydrated) {
+    return <div className="h-24 animate-pulse rounded-xl bg-surface-border/30" />;
+  }
+
   return (
     <div className="space-y-4">
+      <ViewModeToggle mode={mode} onChange={setMode} />
+
       {metricsWarning && (
         <div className="rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-[11px] text-accent">
           FINNHUB_API_KEY가 설정되지 않았습니다. Railway/서버 환경 변수를
@@ -50,6 +65,7 @@ export default function QuantPanel() {
       )}
 
       <FactorStrategyPanel
+        viewMode={mode}
         strategies={MULTI_FACTOR_STRATEGIES}
         selectedId={strategyId}
         onSelectStrategy={setStrategyId}
@@ -57,12 +73,15 @@ export default function QuantPanel() {
         onWeightsChange={setWeights}
         universeId={universeId}
         onUniverseChange={setUniverseId}
+        strategyShortName={strategyShortName}
       />
 
       <RankingPanel
+        viewMode={mode}
         strategyId={strategyId}
         weights={weights}
         universeId={universeId}
+        strategyShortName={strategyShortName}
         onSelectStock={(t) => setSelectedTicker(t || null)}
         selectedTicker={selectedTicker}
         favoriteTickers={favorites.tickers}
@@ -70,6 +89,7 @@ export default function QuantPanel() {
       />
 
       <FactorBacktestPanel
+        viewMode={mode}
         strategyId={strategyId}
         weights={weights}
         strategyName={strategyName}

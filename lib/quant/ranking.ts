@@ -7,6 +7,8 @@ import type {
   FactorWeights,
   QuantMetrics,
   RankingEntry,
+  StockFactorDetailResponse,
+  StockMetricsSummary,
 } from "./types";
 
 function computeRanks(
@@ -134,13 +136,26 @@ export function getStockFactorDetail(
   ticker: string,
   universe: QuantMetrics[],
   weights?: FactorWeights
-): RankingEntry | null {
+): StockFactorDetailResponse | null {
   const m = universe.find((x) => x.ticker === ticker);
   if (!m) return null;
 
   const all = buildUniverseRanking(universe, weights, universe.length);
   const entry = all.find((e) => e.ticker === ticker);
-  if (entry) return entry;
+
+  const metrics: StockMetricsSummary = {
+    peRatio: m.peRatio,
+    pbRatio: m.pbRatio,
+    evToEbitda: m.evToEbitda,
+    freeCashFlowYield: m.freeCashFlowYield,
+    roe: m.roe,
+    roic: m.roic,
+    volatility: m.volatility,
+    maxDrawdown: m.maxDrawdown,
+    beta: m.beta,
+  };
+
+  if (entry) return { ...entry, metrics };
 
   const factors = computeAllFactorScores(m, universe);
   const w = weights ?? { value: 20, quality: 20, growth: 20, momentum: 20, stability: 20 };
@@ -154,5 +169,6 @@ export function getStockFactorDetail(
     overallScore,
     overallRank: 0,
     aiSummary: buildAiFactorSummary(factors, overallScore),
+    metrics,
   };
 }
