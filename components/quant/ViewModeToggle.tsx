@@ -22,7 +22,7 @@ const MODES: Array<{
   {
     id: "advanced",
     label: "고급",
-    description: "팩터·전략·백테스트 · 퀀트 연구",
+    description: "팩터 랭킹 · 가중치 · 스크리너",
     icon: "◆",
   },
 ];

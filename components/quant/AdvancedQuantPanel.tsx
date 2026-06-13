@@ -2,10 +2,7 @@
 
 import FactorBacktestPanel from "./FactorBacktestPanel";
 import FactorStrategyPanel from "./FactorStrategyPanel";
-import MarketFactorDashboard from "./MarketFactorDashboard";
-import PortfolioGeneratorPanel from "./PortfolioGeneratorPanel";
 import RankingPanel from "./RankingPanel";
-import StrategyBattlePanel from "./StrategyBattlePanel";
 import { MULTI_FACTOR_STRATEGIES } from "@/lib/quant/multi-factor";
 import type {
   FactorWeights,
@@ -52,8 +49,6 @@ export default function AdvancedQuantPanel({
 
   return (
     <div className="space-y-4">
-      <MarketFactorDashboard universeId={universeId} />
-
       <FactorStrategyPanel
         viewMode="advanced"
         strategies={MULTI_FACTOR_STRATEGIES}
@@ -78,18 +73,11 @@ export default function AdvancedQuantPanel({
         onToggleFavorite={onToggleFavorite}
       />
 
-      <StrategyBattlePanel />
-
       <FactorBacktestPanel
         viewMode="advanced"
         strategyId={strategyId}
         weights={weights}
         strategyName={strategyName}
-      />
-
-      <PortfolioGeneratorPanel
-        universeId={universeId}
-        onSelectStock={(t) => onSelectStock(t)}
       />
     </div>
   );

@@ -90,23 +90,8 @@ export interface StockMetricsSummary {
   beta: number | null;
 }
 
-export interface FactorContributionItem {
-  factor: FactorId;
-  label: string;
-  score: number;
-  contribution: number;
-}
-
-export interface FactorContributionResult {
-  overallScore: number;
-  baseline: number;
-  items: FactorContributionItem[];
-  aiExplanation: string;
-}
-
 export interface StockFactorDetailResponse extends RankingEntry {
   metrics: StockMetricsSummary;
-  contribution?: FactorContributionResult;
 }
 
 export interface RankingResponse {

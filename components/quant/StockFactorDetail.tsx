@@ -131,14 +131,14 @@ export default function StockFactorDetail({
         <div className="mt-4 space-y-4">
           <div className="rounded-lg border border-accent/20 bg-accent/5 p-3">
             <div className="flex items-baseline justify-between">
-              <span className="text-xs text-gray-400">Overall Score</span>
+              <span className="text-xs text-gray-400">Overall Rank</span>
               <span className="font-mono text-xl font-bold text-accent">
                 {detail.overallScore}
               </span>
             </div>
             {detail.overallRank > 0 && (
               <p className="mt-1 text-[10px] text-neutral">
-                Overall Rank #{detail.overallRank}
+                유니버스 #{detail.overallRank}
               </p>
             )}
           </div>
@@ -150,53 +150,17 @@ export default function StockFactorDetail({
                 className="rounded-lg border border-surface-border px-3 py-2"
               >
                 <p className="text-[10px] text-neutral">
-                  {FACTOR_LABELS[f].shortName}
+                  {FACTOR_LABELS[f].shortName} Score
                 </p>
                 <p className="font-mono text-sm font-semibold text-white">
                   {detail.factors[f]}
                 </p>
                 {detail.factorRanks[f] > 0 && (
-                  <p className="text-[10px] text-neutral">
-                    {FACTOR_LABELS[f].shortName} Rank #{detail.factorRanks[f]}
-                  </p>
+                  <p className="text-[10px] text-neutral">#{detail.factorRanks[f]}</p>
                 )}
               </div>
             ))}
           </div>
-
-          {detail.contribution && (
-            <div className="rounded-lg border border-surface-border p-3 space-y-2">
-              <div className="flex items-baseline justify-between">
-                <span className="text-xs text-gray-400">Overall Score</span>
-                <span className="font-mono text-lg font-bold text-accent">
-                  {detail.contribution.overallScore}
-                </span>
-              </div>
-              <p className="text-[10px] text-neutral">팩터 기여도 (중립 50 기준)</p>
-              <div className="flex flex-wrap gap-2">
-                {detail.contribution.items.map((item) => (
-                  <span
-                    key={item.factor}
-                    className={`rounded-full border px-2 py-0.5 font-mono text-[10px] ${
-                      item.contribution >= 0
-                        ? "border-bullish/30 text-bullish"
-                        : "border-bearish/30 text-bearish"
-                    }`}
-                  >
-                    {item.contribution >= 0 ? "+" : "-"}
-                    {item.label} {item.contribution >= 0 ? "+" : ""}
-                    {item.contribution}
-                  </span>
-                ))}
-              </div>
-              <div className="rounded-lg border border-accent/20 bg-accent/5 px-3 py-2">
-                <p className="text-[10px] font-semibold text-accent mb-0.5">AI 해석</p>
-                <p className="text-xs leading-relaxed text-gray-300">
-                  {detail.contribution.aiExplanation}
-                </p>
-              </div>
-            </div>
-          )}
 
           {detail.metrics && (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
