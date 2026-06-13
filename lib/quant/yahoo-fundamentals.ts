@@ -46,6 +46,12 @@ export function needsFundamentalEnrich(m: QuantMetrics): boolean {
   );
 }
 
+export function needsValueEnrich(m: QuantMetrics): boolean {
+  const hasPe = m.peRatio != null && m.peRatio > 0;
+  const hasPb = m.pbRatio != null && m.pbRatio > 0;
+  return !hasPe && !hasPb;
+}
+
 export function needsGrowthEnrich(m: QuantMetrics): boolean {
   return m.revenueGrowth == null && m.epsGrowth == null;
 }
@@ -280,6 +286,89 @@ export async function enrichGrowthFromYahoo(
         await enrichOneGrowth(needs[i]);
       } catch {
         // 개별 종목 실패는 무 ignore
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, needs.length) }, worker)
+  );
+}
+
+export async function enrichValueFromYahoo(
+  metrics: QuantMetrics[],
+  options?: { concurrency?: number }
+): Promise<void> {
+  const needs = metrics.filter(needsValueEnrich);
+  if (needs.length === 0) return;
+
+  const concurrency = options?.concurrency ?? 4;
+  let index = 0;
+
+  async function enrichOneValue(m: QuantMetrics): Promise<void> {
+    const encoded = encodeURIComponent(m.ticker);
+    const query =
+      "modules=summaryDetail,defaultKeyStatistics&formatted=false";
+
+    for (const host of YAHOO_HOSTS) {
+      try {
+        const response = await withTimeout(
+          fetchYahoo(`${host}/v10/finance/quoteSummary/${encoded}?${query}`, {
+            headers: {
+              "User-Agent": YAHOO_USER_AGENT,
+              Accept: "application/json",
+            },
+            cache: "no-store",
+          }),
+          YAHOO_TIMEOUT,
+          "yahoo value quoteSummary"
+        );
+        if (!response.ok) continue;
+
+        const json = (await response.json()) as DirectQuoteSummaryResult;
+        const block = json.quoteSummary?.result?.[0];
+        if (!block) continue;
+
+        applyFromQuoteSummary(
+          m,
+          block.summaryDetail,
+          undefined,
+          block.defaultKeyStatistics
+        );
+        if (!needsValueEnrich(m)) return;
+      } catch {
+        // try next host
+      }
+    }
+
+    if (needsValueEnrich(m)) {
+      try {
+        const summary = await withTimeout(
+          yahooFinance.quoteSummary(m.ticker, {
+            modules: ["summaryDetail", "defaultKeyStatistics"],
+          }),
+          YAHOO_TIMEOUT,
+          "yahoo value library"
+        );
+        applyFromQuoteSummary(
+          m,
+          summary.summaryDetail,
+          undefined,
+          summary.defaultKeyStatistics
+        );
+      } catch {
+        // library 실패
+      }
+    }
+  }
+
+  async function worker() {
+    while (index < needs.length) {
+      const i = index++;
+      try {
+        await enrichOneValue(needs[i]);
+      } catch {
+        // 개별 종목 실패는 무시
       }
     }
   }

@@ -1,7 +1,7 @@
 import { withTimeout } from "@/lib/timeout";
 import { fetchMonthlyPrices } from "./yahoo-history";
 import { UNIVERSE_NAMES } from "./universe";
-import { needsFundamentalEnrich, needsGrowthEnrich, enrichFundamentalsFromYahoo, enrichGrowthFromYahoo } from "./yahoo-fundamentals";
+import { needsFundamentalEnrich, needsGrowthEnrich, needsValueEnrich, enrichFundamentalsFromYahoo, enrichGrowthFromYahoo, enrichValueFromYahoo } from "./yahoo-fundamentals";
 import type { QuantMetrics } from "./types";
 
 const FINNHUB_TIMEOUT = 6_000;
@@ -267,6 +267,7 @@ export async function fetchUniverseProfiles(
 export async function enrichScoringPool(metrics: QuantMetrics[]): Promise<void> {
   await enrichFundamentalsFromYahoo(metrics, { concurrency: 6 });
   await enrichGrowthFields(metrics);
+  await enrichValueFields(metrics);
   await enrichMomentumFromPrices(metrics, { range: "3y", concurrency: 6 });
 }
 
@@ -275,6 +276,28 @@ export async function enrichGrowthFields(metrics: QuantMetrics[]): Promise<void>
   if (metrics.every((m) => !needsGrowthEnrich(m))) return;
   await enrichGrowthFromYahoo(metrics, { concurrency: 4 });
   await enrichGrowthFromFinnhub(metrics);
+}
+
+/** PER/PBR 등 밸류에이션만 보강 — 캐시 hit 시 lazy 호출용 */
+export async function enrichValueFields(metrics: QuantMetrics[]): Promise<void> {
+  if (metrics.every((m) => !needsValueEnrich(m))) return;
+  await enrichValueFromYahoo(metrics, { concurrency: 4 });
+  await enrichValueFromFinnhub(metrics);
+}
+
+async function enrichValueFromFinnhub(metrics: QuantMetrics[]): Promise<void> {
+  if (!getToken()) return;
+  const needs = metrics.filter(needsValueEnrich);
+  if (needs.length === 0) return;
+
+  await mapConcurrent(needs, 6, async (m) => {
+    const full = await fetchOne(m.ticker);
+    if (!full) return;
+    if (m.peRatio == null || m.peRatio <= 0) m.peRatio = full.peRatio;
+    if (m.pbRatio == null || m.pbRatio <= 0) m.pbRatio = full.pbRatio;
+    if (m.evToEbitda == null) m.evToEbitda = full.evToEbitda;
+    if (m.freeCashFlowYield == null) m.freeCashFlowYield = full.freeCashFlowYield;
+  });
 }
 
 async function enrichGrowthFromFinnhub(metrics: QuantMetrics[]): Promise<void> {

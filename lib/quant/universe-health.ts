@@ -3,12 +3,27 @@ import { needsGrowthEnrich } from "./yahoo-fundamentals";
 
 const MIN_FUNDAMENTAL_COVERAGE = 0.2;
 const MIN_GROWTH_COVERAGE = 0.3;
+const MIN_VALUE_COVERAGE = 0.3;
+
+/** PER 또는 PBR이 채워졌는지 */
+export function hasValueMetrics(m: QuantMetrics): boolean {
+  return (
+    (m.peRatio != null && m.peRatio > 0) ||
+    (m.pbRatio != null && m.pbRatio > 0)
+  );
+}
 
 /** 밸류에이션 + 수익성 지표가 최소 한 쌍 이상 채워졌는지 */
 export function hasCoreFundamentals(m: QuantMetrics): boolean {
-  const hasValue = m.peRatio != null || m.pbRatio != null;
   const hasQuality = m.roe != null || m.operatingMargin != null;
-  return hasValue && hasQuality;
+  return hasValueMetrics(m) && hasQuality;
+}
+
+/** PER/PBR이 채워진 종목 비율 (0~1) */
+export function valueCoverage(metrics: QuantMetrics[]): number {
+  if (metrics.length === 0) return 0;
+  const covered = metrics.filter(hasValueMetrics).length;
+  return covered / metrics.length;
 }
 
 /** 유니버스 중 핵심 재무 지표가 채워진 종목 비율 (0~1) */
@@ -16,6 +31,22 @@ export function fundamentalCoverage(metrics: QuantMetrics[]): number {
   if (metrics.length === 0) return 0;
   const covered = metrics.filter(hasCoreFundamentals).length;
   return covered / metrics.length;
+}
+
+export function isUniverseValueSparse(metrics: QuantMetrics[]): boolean {
+  return valueCoverage(metrics) < MIN_VALUE_COVERAGE;
+}
+
+/** 가치주 적합도만 0이고 다른 전략은 살아 있는 stale overview */
+export function isValueOverviewStale(
+  overviews: Array<{ id?: string; suitabilityScore: number }>
+): boolean {
+  const value = overviews.find((o) => o.id === "value");
+  if (!value || value.suitabilityScore > 0) return false;
+  const othersAlive = overviews.filter(
+    (o) => o.id !== "value" && o.suitabilityScore > 0
+  ).length;
+  return othersAlive >= 2;
 }
 
 /** 매출·EPS 성장률이 채워진 종목 비율 (0~1) */

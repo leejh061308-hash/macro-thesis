@@ -8,6 +8,7 @@ import {
   enrichMomentumFromPrices,
   enrichScoringPool,
   enrichGrowthFields,
+  enrichValueFields,
   fetchUniverseProfiles,
 } from "./metrics-service";
 import { getScoringTickerList, selectScoringUniverse } from "./scoring-universe";
@@ -19,6 +20,8 @@ import {
   isOverviewLikelyStale,
   isUniverseFundamentallySparse,
   isUniverseGrowthSparse,
+  isUniverseValueSparse,
+  isValueOverviewStale,
 } from "./universe-health";
 import {
   computeStrategyScore,
@@ -76,31 +79,37 @@ const DEFAULT_PORTFOLIO_SIZE = 20;
 const UNIVERSE_CACHE_VERSION = "v9";
 export const SCORING_METRICS_CACHE_KEY = `scoring-metrics-${UNIVERSE_CACHE_VERSION}`;
 const SCORING_CACHE_KEY = SCORING_METRICS_CACHE_KEY;
-const OVERVIEW_CACHE_KEY = "strategy-overview-v8";
+const OVERVIEW_CACHE_KEY = "strategy-overview-v9";
 
 let fullUniverseInFlight: Promise<void> | null = null;
 let scoringInFlight: Promise<QuantMetrics[]> | null = null;
-let growthInFlight: Promise<void> | null = null;
+let scoringEnrichInFlight: Promise<void> | null = null;
 
-async function ensureGrowthEnriched(metrics: QuantMetrics[]): Promise<void> {
-  if (!isUniverseGrowthSparse(metrics)) return;
+function persistScoringCache(metrics: QuantMetrics[]): void {
+  if (!isUniverseFundamentallySparse(metrics)) {
+    setCached(SCORING_CACHE_KEY, metrics, METRICS_CACHE_TTL);
+  }
+}
 
-  if (growthInFlight) {
-    await growthInFlight;
+async function ensureScoringFieldsEnriched(metrics: QuantMetrics[]): Promise<void> {
+  const needsGrowth = isUniverseGrowthSparse(metrics);
+  const needsValue = isUniverseValueSparse(metrics);
+  if (!needsGrowth && !needsValue) return;
+
+  if (scoringEnrichInFlight) {
+    await scoringEnrichInFlight;
     return;
   }
 
-  growthInFlight = enrichGrowthFields(metrics)
-    .then(() => {
-      if (!isUniverseFundamentallySparse(metrics)) {
-        setCached(SCORING_CACHE_KEY, metrics, METRICS_CACHE_TTL);
-      }
-    })
-    .finally(() => {
-      growthInFlight = null;
-    });
+  scoringEnrichInFlight = (async () => {
+    if (needsGrowth) await enrichGrowthFields(metrics);
+    if (needsValue) await enrichValueFields(metrics);
+    persistScoringCache(metrics);
+  })().finally(() => {
+    scoringEnrichInFlight = null;
+  });
 
-  await growthInFlight;
+  await scoringEnrichInFlight;
 }
 
 export function getCachedScoringUniverse(): QuantMetrics[] | null {
@@ -152,7 +161,7 @@ async function enrichFullUniverse(universeId: UniverseId = "combined"): Promise<
 export async function getScoringUniverseMetrics(): Promise<QuantMetrics[]> {
   const cached = getCachedScoringUniverse();
   if (cached) {
-    await ensureGrowthEnriched(cached);
+    await ensureScoringFieldsEnriched(cached);
     triggerFullUniverseBackground();
     return cached;
   }
@@ -174,11 +183,9 @@ async function loadScoringUniverseMetrics(): Promise<QuantMetrics[]> {
       : await fetchUniverseProfiles(tickers);
 
   await enrichScoringPool(metrics);
-  await ensureGrowthEnriched(metrics);
+  await ensureScoringFieldsEnriched(metrics);
 
-  if (!isUniverseFundamentallySparse(metrics)) {
-    setCached(SCORING_CACHE_KEY, metrics, METRICS_CACHE_TTL);
-  }
+  persistScoringCache(metrics);
 
   triggerFullUniverseBackground();
   return metrics;
@@ -217,7 +224,8 @@ export async function getStrategyOverviews(options?: {
   if (
     cached?.length &&
     !isOverviewLikelyStale(cached) &&
-    !isGrowthOverviewStale(cached)
+    !isGrowthOverviewStale(cached) &&
+    !isValueOverviewStale(cached)
   ) {
     if (!includeEntry) {
       return cached.map((o) => ({
@@ -266,6 +274,7 @@ export async function getStrategyOverviews(options?: {
     merged.length > 0 &&
     !isOverviewLikelyStale(merged) &&
     !isGrowthOverviewStale(merged) &&
+    !isValueOverviewStale(merged) &&
     (!includeEntry || !isEntryEnvLikelyStale(merged)) &&
     coverage >= 0.15
   ) {

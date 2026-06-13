@@ -4,7 +4,7 @@ import { getStrategyEntryEnvironments } from "@/lib/timing/service";
 
 export type QuantCacheStatus = "ready" | "warming" | "cold";
 
-const OVERVIEW_CACHE_KEY = "strategy-overview-v8";
+const OVERVIEW_CACHE_KEY = "strategy-overview-v9";
 
 let warmInFlight: Promise<void> | null = null;
 
