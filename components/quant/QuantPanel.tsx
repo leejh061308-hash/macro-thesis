@@ -1,67 +1,44 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import BacktestPanel from "./BacktestPanel";
-import ComparePanel from "./ComparePanel";
-import ScreenerSection from "./ScreenerSection";
-import StrategyEntryEnvironment from "@/components/timing/StrategyEntryEnvironment";
+import FactorBacktestPanel from "./FactorBacktestPanel";
+import FactorStrategyPanel from "./FactorStrategyPanel";
+import RankingPanel from "./RankingPanel";
 import { useQuantFavorites } from "@/hooks/useQuantFavorites";
+import { MULTI_FACTOR_STRATEGIES } from "@/lib/quant/multi-factor";
 import type {
-  CompareResult,
-  StrategyDefinition,
-  StrategyId,
+  FactorWeights,
+  MultiFactorStrategyId,
+  UniverseId,
 } from "@/lib/quant/types";
 
 export default function QuantPanel() {
-  const [strategies, setStrategies] = useState<StrategyDefinition[]>([]);
-  const [selectedId, setSelectedId] = useState<StrategyId | null>("growth");
-  const [compareSelection, setCompareSelection] = useState<StrategyId[]>([]);
-  const [compareResult, setCompareResult] = useState<CompareResult | null>(
-    null
-  );
-  const [compareLoading, setCompareLoading] = useState(false);
+  const [strategyId, setStrategyId] =
+    useState<MultiFactorStrategyId | "custom">("all-factor");
+  const [weights, setWeights] = useState<FactorWeights>({
+    value: 25,
+    quality: 25,
+    growth: 25,
+    momentum: 25,
+  });
+  const [universeId, setUniverseId] = useState<UniverseId>("combined");
+  const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
   const [metricsWarning, setMetricsWarning] = useState(false);
 
-  const { favorites, toggleStrategy, toggleTicker } = useQuantFavorites();
+  const { favorites, toggleTicker } = useQuantFavorites();
 
   useEffect(() => {
-    fetch("/api/quant/strategies")
+    fetch("/api/quant/ranking?strategy=all-factor&limit=1")
       .then((res) => res.json())
-      .then((data) => {
-        setStrategies(data.strategies ?? []);
-        setMetricsWarning(!data.metricsAvailable);
-      })
+      .then((data) => setMetricsWarning(!data.metricsAvailable))
       .catch(() => {});
   }, []);
 
-  const handleToggleCompare = (id: StrategyId) => {
-    setCompareSelection((prev) =>
-      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
-    );
-  };
-
-  const handleCompare = async () => {
-    setCompareLoading(true);
-    try {
-      const res = await fetch("/api/quant/compare", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          strategies: compareSelection,
-          period: "3y",
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setCompareResult(data as CompareResult);
-    } catch {
-      // ignore
-    } finally {
-      setCompareLoading(false);
-    }
-  };
-
-  const selectedStrategy = strategies.find((s) => s.id === selectedId);
+  const strategyName =
+    strategyId === "custom"
+      ? "커스텀 멀티팩터"
+      : (MULTI_FACTOR_STRATEGIES.find((s) => s.id === strategyId)?.name ??
+        "All Factor");
 
   return (
     <div className="space-y-4">
@@ -72,58 +49,47 @@ export default function QuantPanel() {
         </div>
       )}
 
-      <StrategyEntryEnvironment />
-      <ScreenerSection
-        strategies={strategies}
-        selectedStrategyId={selectedId}
-        onSelectStrategy={setSelectedId}
-        favoriteTickers={favorites.tickers}
-        onToggleTickerFavorite={toggleTicker}
-        compareSelection={compareSelection}
-        onToggleCompare={handleToggleCompare}
-        onCompare={handleCompare}
-        compareLoading={compareLoading}
+      <FactorStrategyPanel
+        strategies={MULTI_FACTOR_STRATEGIES}
+        selectedId={strategyId}
+        onSelectStrategy={setStrategyId}
+        weights={weights}
+        onWeightsChange={setWeights}
+        universeId={universeId}
+        onUniverseChange={setUniverseId}
       />
-      {selectedStrategy && (
-        <BacktestPanel
-          strategy={selectedStrategy}
-          isFavorite={favorites.strategies.includes(selectedStrategy.id)}
-          onToggleFavorite={() => toggleStrategy(selectedStrategy.id)}
-        />
-      )}
 
-      {compareResult && (
-        <ComparePanel
-          result={compareResult}
-          onClose={() => setCompareResult(null)}
-        />
-      )}
+      <RankingPanel
+        strategyId={strategyId}
+        weights={weights}
+        universeId={universeId}
+        onSelectStock={(t) => setSelectedTicker(t || null)}
+        selectedTicker={selectedTicker}
+        favoriteTickers={favorites.tickers}
+        onToggleFavorite={toggleTicker}
+      />
 
-      {(favorites.strategies.length > 0 || favorites.tickers.length > 0) && (
+      <FactorBacktestPanel
+        strategyId={strategyId}
+        weights={weights}
+        strategyName={strategyName}
+      />
+
+      {favorites.tickers.length > 0 && (
         <div className="rounded-xl border border-surface-border bg-surface-card p-4 card-glow">
-          <h3 className="text-xs font-semibold text-gray-400">즐겨찾기</h3>
-          {favorites.strategies.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {favorites.strategies.map((id) => {
-                const s = strategies.find((x) => x.id === id);
-                return s ? (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setSelectedId(id)}
-                    className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] text-accent"
-                  >
-                    {s.shortName}
-                  </button>
-                ) : null;
-              })}
-            </div>
-          )}
-          {favorites.tickers.length > 0 && (
-            <p className="mt-2 text-[11px] text-neutral">
-              종목 {favorites.tickers.length}개 저장됨
-            </p>
-          )}
+          <h3 className="text-xs font-semibold text-gray-400">즐겨찾기 종목</h3>
+          <div className="mt-2 flex flex-wrap gap-1">
+            {favorites.tickers.map((ticker) => (
+              <button
+                key={ticker}
+                type="button"
+                onClick={() => setSelectedTicker(ticker)}
+                className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] text-accent"
+              >
+                {ticker}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

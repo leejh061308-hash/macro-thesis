@@ -14,7 +14,86 @@ export type StrategyId =
   | "rate-hike"
   | "rate-cut";
 
+export type FactorId =
+  | "value"
+  | "quality"
+  | "growth"
+  | "momentum"
+  | "stability";
+
+export type MultiFactorStrategyId =
+  | "value-quality"
+  | "quality-momentum"
+  | "value-momentum"
+  | "all-factor"
+  | "custom";
+
+export type RebalanceFrequency =
+  | "monthly"
+  | "quarterly"
+  | "semiannual"
+  | "annual";
+
+export type PortfolioSize = 10 | 20 | 50 | 100;
+
+export type UniverseId = "combined" | "sp500" | "nasdaq100";
+
 export type BacktestPeriod = "1y" | "3y" | "5y" | "10y";
+
+export interface FactorScores {
+  value: number;
+  quality: number;
+  growth: number;
+  momentum: number;
+  stability: number;
+}
+
+export type FactorRanks = FactorScores;
+
+export interface FactorWeights {
+  value?: number;
+  quality?: number;
+  growth?: number;
+  momentum?: number;
+  stability?: number;
+}
+
+export interface MultiFactorStrategyDefinition {
+  id: MultiFactorStrategyId;
+  name: string;
+  shortName: string;
+  description: string;
+  aiSummary: string;
+  defaultWeights: FactorWeights;
+  icon: string;
+}
+
+export interface RankingEntry {
+  ticker: string;
+  name: string;
+  factors: FactorScores;
+  factorRanks: FactorRanks;
+  overallScore: number;
+  overallRank: number;
+  aiSummary: string;
+}
+
+export interface RankingResponse {
+  universe: UniverseId;
+  universeSize: number;
+  strategyId: MultiFactorStrategyId | "custom";
+  weights: FactorWeights;
+  entries: RankingEntry[];
+  updatedAt: string;
+}
+
+export interface BacktestConfig {
+  period: BacktestPeriod;
+  rebalance: RebalanceFrequency;
+  portfolioSize: PortfolioSize;
+  weights: FactorWeights;
+  strategyId?: MultiFactorStrategyId | "custom";
+}
 
 export type StrategyCategory = "style" | "theme";
 
@@ -94,14 +173,18 @@ export interface BacktestStats {
 }
 
 export interface BacktestResult {
-  strategyId: StrategyId;
+  strategyId: StrategyId | MultiFactorStrategyId | "custom";
   strategyName: string;
   period: BacktestPeriod;
   periodLabel: string;
+  rebalance: RebalanceFrequency;
+  rebalanceLabel: string;
+  portfolioSize: PortfolioSize;
   stats: BacktestStats;
   chart: BacktestPoint[];
   methodology: string;
   selectionNote: string;
+  weights?: FactorWeights;
 }
 
 export interface ScreenerFilters {
@@ -116,8 +199,10 @@ export interface ScreenerFilters {
 
 export interface CompareResult {
   period: BacktestPeriod;
+  rebalance: RebalanceFrequency;
+  portfolioSize: PortfolioSize;
   strategies: Array<{
-    id: StrategyId;
+    id: StrategyId | MultiFactorStrategyId | "custom" | "spy" | "qqq";
     name: string;
     stats: BacktestStats;
     chart: BacktestPoint[];

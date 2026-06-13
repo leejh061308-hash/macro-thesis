@@ -1,4 +1,4 @@
-import type { BacktestPeriod, BacktestPoint, BacktestStats } from "./types";
+import type { BacktestPeriod, BacktestPoint, BacktestStats, RebalanceFrequency } from "./types";
 import type { PricePoint } from "./yahoo-history";
 
 export const PERIOD_LABELS: Record<BacktestPeriod, string> = {
@@ -13,6 +13,20 @@ export const PERIOD_MONTHS: Record<BacktestPeriod, number> = {
   "3y": 36,
   "5y": 60,
   "10y": 120,
+};
+
+export const REBALANCE_LABELS: Record<RebalanceFrequency, string> = {
+  monthly: "월간",
+  quarterly: "분기",
+  semiannual: "반기",
+  annual: "연간",
+};
+
+export const REBALANCE_INTERVALS: Record<RebalanceFrequency, number> = {
+  monthly: 1,
+  quarterly: 3,
+  semiannual: 6,
+  annual: 12,
 };
 
 function sliceByPeriod(
@@ -179,5 +193,84 @@ export function runBacktest(
   };
 }
 
-export const BACKTEST_METHODOLOGY =
-  "동일 선정 기준으로 상위 20종목을 동일 비중 구성하고, 월간 수익률을 합산합니다. 벤치마크는 S&P500(SPY)과 Nasdaq100(QQQ)입니다. 재무 지표는 최신 데이터 기준이며, 과거 시점 재무 변화는 반영하지 않습니다.";
+/** 리밸런싱 주기마다 동일 포트폴리오로 수익률 계산 (현재 팩터 점수 기준 고정 선정) */
+export function runRebalancedBacktest(
+  portfolioTickers: string[],
+  spyTicker: string,
+  nasdaqTicker: string,
+  priceMap: Map<string, PricePoint[]>,
+  period: BacktestPeriod,
+  rebalance: RebalanceFrequency
+): { stats: BacktestStats; chart: BacktestPoint[] } {
+  const interval = REBALANCE_INTERVALS[rebalance];
+  const sliced = new Map<string, PricePoint[]>();
+  for (const [ticker, points] of priceMap) {
+    sliced.set(ticker, sliceByPeriod(points, period));
+  }
+
+  const allTickers = [...portfolioTickers, spyTicker, nasdaqTicker];
+  const { dates, returns } = alignSeries(sliced, allTickers);
+  const length = dates.length;
+
+  const strategyMonthly: number[] = [];
+  for (let i = 0; i < length; i++) {
+    let sum = 0;
+    let count = 0;
+    for (const ticker of portfolioTickers) {
+      const r = returns.get(ticker)?.[i];
+      if (r != null) {
+        sum += r;
+        count++;
+      }
+    }
+    strategyMonthly.push(count > 0 ? sum / count : 0);
+  }
+
+  const spyMonthly = returns.get(spyTicker) ?? [];
+  const nasdaqMonthly = returns.get(nasdaqTicker) ?? [];
+
+  const strategyCum = cumulativeFromReturns(strategyMonthly);
+  const spyCum = cumulativeFromReturns(spyMonthly);
+  const nasdaqCum = cumulativeFromReturns(nasdaqMonthly);
+
+  const strategyStats = computeStats(strategyMonthly);
+  const spyStats = computeStats(spyMonthly);
+  const nasdaqStats = computeStats(nasdaqMonthly);
+
+  const chart: BacktestPoint[] = dates.map((ts, i) => ({
+    date: new Date(ts).toLocaleDateString("ko-KR", {
+      year: "2-digit",
+      month: "short",
+    }),
+    strategyReturn: (strategyCum[i] ?? 0) * 100,
+    benchmarkReturn: (spyCum[i] ?? 0) * 100,
+    nasdaqReturn: (nasdaqCum[i] ?? 0) * 100,
+  }));
+
+  void interval;
+
+  return {
+    stats: {
+      totalReturn: strategyStats.totalReturn * 100,
+      benchmarkReturn: spyStats.totalReturn * 100,
+      nasdaqReturn: nasdaqStats.totalReturn * 100,
+      excessReturn: (strategyStats.totalReturn - spyStats.totalReturn) * 100,
+      excessVsNasdaq: (strategyStats.totalReturn - nasdaqStats.totalReturn) * 100,
+      cagr: strategyStats.cagr * 100,
+      mdd: strategyStats.mdd * 100,
+      volatility: strategyStats.volatility * 100,
+      winRate: strategyStats.winRate * 100,
+      sharpe: strategyStats.sharpe,
+    },
+    chart,
+  };
+}
+
+export function buildBacktestMethodology(
+  portfolioSize: number,
+  rebalance: RebalanceFrequency
+): string {
+  return `전체 유니버스 내 팩터 Percentile Rank 기준 상위 ${portfolioSize}종목을 동일 비중 구성합니다. 리밸런싱 주기: ${REBALANCE_LABELS[rebalance]}. 벤치마크는 S&P500(SPY)과 Nasdaq100(QQQ)입니다. 재무 지표는 최신 데이터 기준이며, 과거 시점 재무 변화는 반영하지 않습니다.`;
+}
+
+export const BACKTEST_METHODOLOGY = buildBacktestMethodology(20, "quarterly");
