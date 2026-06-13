@@ -2,14 +2,13 @@ import {
   getCached,
   setCached,
 } from "@/lib/quant/cache";
-import { fetchTickerMetrics, fetchUniverseMetrics } from "@/lib/quant/metrics-service";
+import { fetchTickerMetrics } from "@/lib/quant/metrics-service";
 import { getScoringUniverseMetrics, getUniverseMetrics } from "@/lib/quant/service";
 import { isEntryEnvLikelyStale } from "@/lib/quant/universe-health";
 import type { QuantMetrics } from "@/lib/quant/types";
 import { BASIC_STYLE_STRATEGY_IDS } from "@/lib/quant/constants";
 import { rankByStrategyFactor } from "@/lib/quant/strategy-factors";
-import { rankByStrategy, getStrategy } from "@/lib/quant/strategies";
-import { UNIVERSE_TICKERS } from "@/lib/quant/universe";
+import { getStrategy, rankByStrategy } from "@/lib/quant/strategies";
 import { listWatchlistSafe } from "@/lib/watchlist-db";
 import { computeCompanyScore } from "./company-score";
 import {
@@ -30,15 +29,13 @@ import type {
 const TIMING_CACHE_TTL = 30 * 60 * 1000;
 
 async function getUniverseForScoring(): Promise<import("@/lib/quant/types").QuantMetrics[]> {
-  const cached = getCached<import("@/lib/quant/types").QuantMetrics[]>("universe-metrics-v2");
-  if (cached?.length) return cached;
-  return fetchUniverseMetrics(UNIVERSE_TICKERS);
+  return getScoringUniverseMetrics();
 }
 
 export async function getTimingScore(
   ticker: string
 ): Promise<TimingScoreResult | null> {
-  const cacheKey = `timing:${ticker}`;
+  const cacheKey = `timing:v2:${ticker}`;
   const cached = getCached<TimingScoreResult>(cacheKey);
   if (cached) return cached;
 

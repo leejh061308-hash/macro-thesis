@@ -239,7 +239,10 @@ export async function getStrategyResultsWithTiming(
       const timing = await getTimingScore(r.ticker);
       return {
         ...r,
-        companyScore: timing?.companyScore ?? r.companyScore,
+        companyScore:
+          r.companyScore && r.companyScore > 0
+            ? r.companyScore
+            : (timing?.companyScore ?? r.companyScore),
         timingScore: timing?.timingScore ?? r.timingScore,
       };
     })
