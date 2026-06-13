@@ -5,6 +5,7 @@ import {
   isThemeStrategy,
   passesThemeFilter,
 } from "./sectors";
+import { computeStrategyFactorScore } from "./strategy-factors";
 import { buildSelectionReasons } from "./strategy-reasons";
 import type {
   QuantMetrics,
@@ -379,7 +380,9 @@ export function rankByStrategy(
 
   const scored = pool
     .map((m) => {
-      const strategyScore = computeStrategyScore(strategyId, m, fullUniverse);
+      const legacy = computeStrategyScore(strategyId, m, fullUniverse);
+      const factor = computeStrategyFactorScore(strategyId, m, fullUniverse);
+      const strategyScore = legacy > 0 ? legacy : factor;
       return {
         ticker: m.ticker,
         name: m.name,

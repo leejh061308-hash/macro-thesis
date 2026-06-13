@@ -4,8 +4,9 @@ import {
 } from "@/lib/quant/cache";
 import { fetchTickerMetrics, fetchUniverseMetrics } from "@/lib/quant/metrics-service";
 import { getUniverseMetrics } from "@/lib/quant/service";
-import { rankByStrategy } from "@/lib/quant/strategies";
-import { STRATEGIES } from "@/lib/quant/strategies";
+import { BASIC_STYLE_STRATEGY_IDS } from "@/lib/quant/constants";
+import { rankByStrategyFactor } from "@/lib/quant/strategy-factors";
+import { rankByStrategy, getStrategy } from "@/lib/quant/strategies";
 import { UNIVERSE_TICKERS } from "@/lib/quant/universe";
 import { listWatchlistSafe } from "@/lib/watchlist-db";
 import { computeCompanyScore } from "./company-score";
@@ -189,40 +190,49 @@ export async function getWatchlistTiming(): Promise<WatchlistTimingItem[]> {
 export async function getStrategyEntryEnvironments(): Promise<
   StrategyEntryEnvironment[]
 > {
-  const cacheKey = "timing:strategy-env";
+  const cacheKey = "timing:strategy-env-v2";
   const cached = getCached<StrategyEntryEnvironment[]>(cacheKey);
-  if (cached) return cached;
+  if (cached?.length) return cached;
 
   const universe = await getUniverseMetrics();
-  const styleStrategies = STRATEGIES.filter((s) => s.category === "style");
 
-  const results: StrategyEntryEnvironment[] = [];
+  const results = await Promise.all(
+    BASIC_STYLE_STRATEGY_IDS.map(async (strategyId) => {
+      const def = getStrategy(strategyId);
+      const ranked = rankByStrategy(strategyId, universe, 8);
+      const tickers =
+        ranked.length > 0
+          ? ranked.map((r) => r.ticker)
+          : rankByStrategyFactor(strategyId, universe, 8).map((r) => r.ticker);
 
-  for (const strategy of styleStrategies) {
-    const ranked = rankByStrategy(strategy.id, universe, 15);
-    if (ranked.length === 0) continue;
-
-    let sum = 0;
-    let count = 0;
-    for (const stock of ranked) {
-      const timing = await getTimingScore(stock.ticker);
-      if (timing) {
-        sum += timing.timingScore;
-        count++;
+      let entryScore = 50;
+      if (tickers.length > 0) {
+        const timings = await Promise.all(
+          tickers.map((ticker) => getTimingScore(ticker))
+        );
+        const valid = timings.filter(
+          (t): t is TimingScoreResult => t != null
+        );
+        if (valid.length > 0) {
+          entryScore = Math.round(
+            valid.reduce((s, t) => s + t.timingScore, 0) / valid.length
+          );
+        }
       }
-    }
 
-    const entryScore = count > 0 ? Math.round(sum / count) : 50;
-    const { label: entryLabel } = getTimingLabel(entryScore);
-    results.push({
-      strategyId: strategy.id,
-      strategyName: strategy.name,
-      shortName: strategy.shortName,
-      entryScore,
-      entryLabel,
-    });
+      const { label: entryLabel } = getTimingLabel(entryScore);
+      return {
+        strategyId,
+        strategyName: def.name,
+        shortName: def.shortName,
+        entryScore,
+        entryLabel,
+      };
+    })
+  );
+
+  if (results.length > 0) {
+    setCached(cacheKey, results, TIMING_CACHE_TTL);
   }
-
-  setCached(cacheKey, results, TIMING_CACHE_TTL);
   return results;
 }

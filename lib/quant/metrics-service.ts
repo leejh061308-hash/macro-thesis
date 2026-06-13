@@ -1,6 +1,7 @@
 import { withTimeout } from "@/lib/timeout";
 import { fetchMonthlyPrices } from "./yahoo-history";
 import { UNIVERSE_NAMES } from "./universe";
+import { needsFundamentalEnrich, enrichFundamentalsFromYahoo } from "./yahoo-fundamentals";
 import type { QuantMetrics } from "./types";
 
 const FINNHUB_TIMEOUT = 8_000;
@@ -203,7 +204,12 @@ function computeTrailingReturn(
 export async function fetchTickerMetrics(
   ticker: string
 ): Promise<QuantMetrics | null> {
-  return fetchOne(ticker);
+  const base = await fetchOne(ticker);
+  if (!base) return null;
+  if (needsFundamentalEnrich(base)) {
+    await enrichFundamentalsFromYahoo([base]);
+  }
+  return base;
 }
 
 export async function fetchUniverseMetrics(

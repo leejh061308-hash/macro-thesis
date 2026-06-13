@@ -1,4 +1,5 @@
 import { getStrategy, rankByStrategy } from "./strategies";
+import { averageTopFactorScore } from "./strategy-factors";
 import type { QuantMetrics, StrategyId } from "./types";
 import { BASIC_STYLE_STRATEGY_IDS } from "./constants";
 
@@ -77,12 +78,15 @@ export function computeStrategyOverview(
   const def = getStrategy(strategyId);
   const ranked = rankByStrategy(strategyId, universe, 10);
 
-  const suitabilityScore =
+  const legacyAvg =
     ranked.length > 0
       ? Math.round(
           ranked.reduce((s, r) => s + r.strategyScore, 0) / ranked.length
         )
       : 0;
+
+  const factorAvg = averageTopFactorScore(strategyId, universe, 10);
+  const suitabilityScore = Math.max(legacyAvg, factorAvg);
 
   const statusLabel = statusFromScore(suitabilityScore);
 

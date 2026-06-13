@@ -8,6 +8,7 @@ import {
   enrichMomentumFromPrices,
   fetchUniverseMetrics,
 } from "./metrics-service";
+import { enrichFundamentalsFromYahoo } from "./yahoo-fundamentals";
 import {
   computeStrategyScore,
   computeStyleTags,
@@ -68,13 +69,14 @@ export async function getUniverseMetrics(
     universeId === "combined"
       ? getUniverseTickers("combined")
       : getUniverseTickers(universeId);
-  const cacheKey = `universe-metrics-v3:${universeId}`;
+  const cacheKey = `universe-metrics-v4:${universeId}`;
 
   const cached = getCached<QuantMetrics[]>(cacheKey);
   if (cached) return cached;
 
   const metrics = await fetchUniverseMetrics(tickers);
   if (metrics.length > 0) {
+    await enrichFundamentalsFromYahoo(metrics);
     await enrichMomentumFromPrices(metrics);
     setCached(cacheKey, metrics, METRICS_CACHE_TTL);
   }
@@ -82,9 +84,9 @@ export async function getUniverseMetrics(
 }
 
 export async function getStrategyOverviews(): Promise<StrategyOverviewItem[]> {
-  const cacheKey = "strategy-overview-v2";
+  const cacheKey = "strategy-overview-v3";
   const cached = getCached<StrategyOverviewItem[]>(cacheKey);
-  if (cached) return cached;
+  if (cached?.length) return cached;
 
   const universe = await getUniverseMetrics();
   const overviews = computeAllStrategyOverviews(universe);
@@ -92,7 +94,7 @@ export async function getStrategyOverviews(): Promise<StrategyOverviewItem[]> {
 
   const merged = overviews.map((o) => {
     const env = environments.find((e) => e.strategyId === o.id);
-    const entryScore = env?.entryScore ?? 62;
+    const entryScore = env?.entryScore ?? 50;
     return {
       ...o,
       entryScore,
@@ -100,7 +102,9 @@ export async function getStrategyOverviews(): Promise<StrategyOverviewItem[]> {
     };
   });
 
-  setCached(cacheKey, merged, METRICS_CACHE_TTL);
+  if (merged.length > 0) {
+    setCached(cacheKey, merged, METRICS_CACHE_TTL);
+  }
   return merged;
 }
 
