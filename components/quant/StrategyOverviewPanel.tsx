@@ -118,7 +118,7 @@ export default function StrategyOverviewPanel({
             <StrategyCard
               key={s.id}
               strategy={s}
-              entryLoading={entryLoading && s.entryLabel === "…"}
+              entryLoading={entryLoading || s.entryLabel === "…"}
               onClick={() => onSelectStrategy(s.id)}
             />
           ))}
@@ -160,12 +160,12 @@ function StrategyCard({
         </div>
         <div>
           <p className="text-[10px] text-neutral">현재 진입 환경</p>
-          {entryLoading ? (
+          {entryLoading || strategy.entryLabel === "…" ? (
             <p className="mt-1 text-xs text-neutral animate-pulse">계산 중…</p>
           ) : (
             <>
               <p className="font-mono text-lg font-bold text-white">
-                {strategy.entryScore}
+                {strategy.entryScore >= 0 ? strategy.entryScore : "—"}
                 <span className="text-xs font-normal text-neutral">점</span>
               </p>
               <p className="text-[10px] text-neutral">{strategy.entryLabel}</p>

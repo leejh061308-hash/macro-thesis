@@ -69,9 +69,9 @@ import type {
 
 const DEFAULT_PORTFOLIO_SIZE = 20;
 
-const UNIVERSE_CACHE_VERSION = "v6";
+const UNIVERSE_CACHE_VERSION = "v7";
 const SCORING_CACHE_KEY = `scoring-metrics-${UNIVERSE_CACHE_VERSION}`;
-const OVERVIEW_CACHE_KEY = "strategy-overview-v5";
+const OVERVIEW_CACHE_KEY = "strategy-overview-v6";
 
 let fullUniverseInFlight: Promise<void> | null = null;
 
@@ -102,7 +102,10 @@ async function enrichFullUniverse(universeId: UniverseId = "combined"): Promise<
   }
 
   if (rest.length > 0) {
-    await enrichFundamentalsFromYahoo(rest, { bulk: true, concurrency: 8 });
+    await enrichFundamentalsFromYahoo(rest, {
+      skipDetailFallback: true,
+      concurrency: 8,
+    });
     await enrichMomentumFromPrices(rest, { range: "3y", concurrency: 6 });
   }
 
@@ -111,16 +114,24 @@ async function enrichFullUniverse(universeId: UniverseId = "combined"): Promise<
 
 /** 기본 탭·전략 카드용 — 대형주 50종목만 빠르게 준비 */
 export async function getScoringUniverseMetrics(): Promise<QuantMetrics[]> {
-  const cached = getCached<QuantMetrics[]>(SCORING_CACHE_KEY);
+  let cached = getCached<QuantMetrics[]>(SCORING_CACHE_KEY);
   if (cached?.length && !isUniverseFundamentallySparse(cached)) {
     triggerFullUniverseBackground();
     return cached;
   }
 
   const tickers = getScoringTickerList();
-  const metrics = await fetchUniverseProfiles(tickers);
+  const metrics =
+    cached?.length === tickers.length
+      ? cached
+      : await fetchUniverseProfiles(tickers);
+
   await enrichScoringPool(metrics);
-  setCached(SCORING_CACHE_KEY, metrics, METRICS_CACHE_TTL);
+
+  if (!isUniverseFundamentallySparse(metrics)) {
+    setCached(SCORING_CACHE_KEY, metrics, METRICS_CACHE_TTL);
+  }
+
   triggerFullUniverseBackground();
   return metrics;
 }
@@ -169,14 +180,14 @@ export async function getStrategyOverviews(options?: {
   if (!includeEntry) {
     return overviews.map((o) => ({
       ...o,
-      entryScore: 0,
+      entryScore: -1,
       entryLabel: "…",
     }));
   }
 
   const entryCached = getCached<
     Awaited<ReturnType<typeof getStrategyEntryEnvironments>>
-  >("timing:strategy-env-v3");
+  >("timing:strategy-env-v4");
 
   const environments = entryCached?.length
     ? entryCached

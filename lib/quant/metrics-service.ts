@@ -265,10 +265,8 @@ export async function fetchUniverseProfiles(
 }
 
 export async function enrichScoringPool(metrics: QuantMetrics[]): Promise<void> {
-  await Promise.all([
-    enrichFundamentalsFromYahoo(metrics, { bulk: true, concurrency: 12 }),
-    enrichMomentumFromPrices(metrics, { range: "3y", concurrency: 8 }),
-  ]);
+  await enrichFundamentalsFromYahoo(metrics, { concurrency: 10 });
+  await enrichMomentumFromPrices(metrics, { range: "3y", concurrency: 8 });
 }
 
 export async function fetchUniverseMetrics(

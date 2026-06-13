@@ -192,7 +192,7 @@ export async function getStrategyEntryEnvironments(
   universeOverride?: QuantMetrics[],
   options?: { tickersPerStrategy?: number }
 ): Promise<StrategyEntryEnvironment[]> {
-  const cacheKey = "timing:strategy-env-v3";
+  const cacheKey = "timing:strategy-env-v4";
   const cached = getCached<StrategyEntryEnvironment[]>(cacheKey);
   if (cached?.length) return cached;
 

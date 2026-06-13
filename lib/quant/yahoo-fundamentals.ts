@@ -1,29 +1,33 @@
 import YahooFinance from "yahoo-finance2";
+import { fetchYahoo } from "@/lib/yahoo-fetch";
 import { withTimeout } from "@/lib/timeout";
 import type { QuantMetrics } from "./types";
 import type { StockDetail } from "@/lib/types";
+
+const YAHOO_HOSTS = [
+  "https://query1.finance.yahoo.com",
+  "https://query2.finance.yahoo.com",
+] as const;
+
+const YAHOO_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 const yahooFinance = new YahooFinance({
   suppressNotices: ["yahooSurvey"],
   queue: { concurrency: 2, interval: 250 },
   fetchOptions: {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-    },
+    headers: { "User-Agent": YAHOO_USER_AGENT },
   },
 });
 
-const YAHOO_TIMEOUT = 10_000;
+const YAHOO_TIMEOUT = 12_000;
 const ENRICH_CONCURRENCY = 10;
-const BULK_ENRICH_CONCURRENCY = 12;
 
 function num(v: unknown): number | null {
   if (typeof v !== "number" || !Number.isFinite(v)) return null;
   return v;
 }
 
-/** Yahoo는 소수(0.15) 또는 퍼센트(15) 형식을 혼용 */
 function pct(v: unknown): number | null {
   const n = num(v);
   if (n == null) return null;
@@ -100,6 +104,54 @@ function applyFromStockDetail(m: QuantMetrics, detail: StockDetail): void {
   if (m.marketCap == null) m.marketCap = detail.marketCap;
 }
 
+interface DirectQuoteSummaryResult {
+  quoteSummary?: {
+    result?: Array<{
+      summaryDetail?: Parameters<typeof applyFromQuoteSummary>[1];
+      financialData?: Parameters<typeof applyFromQuoteSummary>[2];
+      defaultKeyStatistics?: Parameters<typeof applyFromQuoteSummary>[3];
+    }>;
+  };
+}
+
+async function enrichOneFromDirectApi(m: QuantMetrics): Promise<boolean> {
+  const encoded = encodeURIComponent(m.ticker);
+  const query =
+    "modules=summaryDetail,financialData,defaultKeyStatistics&formatted=false";
+
+  for (const host of YAHOO_HOSTS) {
+    try {
+      const response = await withTimeout(
+        fetchYahoo(`${host}/v10/finance/quoteSummary/${encoded}?${query}`, {
+          headers: {
+            "User-Agent": YAHOO_USER_AGENT,
+            Accept: "application/json",
+          },
+          cache: "no-store",
+        }),
+        YAHOO_TIMEOUT,
+        "yahoo direct quoteSummary"
+      );
+      if (!response.ok) continue;
+
+      const json = (await response.json()) as DirectQuoteSummaryResult;
+      const block = json.quoteSummary?.result?.[0];
+      if (!block) continue;
+
+      applyFromQuoteSummary(
+        m,
+        block.summaryDetail,
+        block.financialData,
+        block.defaultKeyStatistics
+      );
+      return !needsFundamentalEnrich(m);
+    } catch {
+      // try next host
+    }
+  }
+  return false;
+}
+
 async function enrichOneFromYahooLibrary(m: QuantMetrics): Promise<void> {
   const summary = await withTimeout(
     yahooFinance.quoteSummary(m.ticker, {
@@ -129,26 +181,31 @@ async function enrichOneFromStockDetail(m: QuantMetrics): Promise<void> {
 
 async function enrichOneFromYahoo(
   m: QuantMetrics,
-  options?: { bulk?: boolean }
+  options?: { skipDetailFallback?: boolean }
 ): Promise<void> {
+  if (!needsFundamentalEnrich(m)) return;
+
+  await enrichOneFromDirectApi(m);
+  if (!needsFundamentalEnrich(m)) return;
+
   try {
     await enrichOneFromYahooLibrary(m);
   } catch {
-    // quoteSummary library 실패
+    // library 실패
   }
+  if (!needsFundamentalEnrich(m)) return;
 
-  if (!options?.bulk && needsFundamentalEnrich(m)) {
+  if (!options?.skipDetailFallback) {
     await enrichOneFromStockDetail(m);
   }
 }
 
 export interface EnrichFundamentalsOptions {
-  /** 대량 보완 시 느린 fallback 생략 */
-  bulk?: boolean;
+  /** stock detail fallback 생략 (백그라운드 full enrich용) */
+  skipDetailFallback?: boolean;
   concurrency?: number;
 }
 
-/** Finnhub metric 누락 시 Yahoo quoteSummary로 재무 지표 보완 */
 export async function enrichFundamentalsFromYahoo(
   metrics: QuantMetrics[],
   options?: EnrichFundamentalsOptions
@@ -156,13 +213,16 @@ export async function enrichFundamentalsFromYahoo(
   const needs = metrics.filter(needsFundamentalEnrich);
   if (needs.length === 0) return;
 
-  const concurrency = options?.concurrency ?? (options?.bulk ? BULK_ENRICH_CONCURRENCY : ENRICH_CONCURRENCY);
+  const concurrency = options?.concurrency ?? ENRICH_CONCURRENCY;
   let index = 0;
+
   async function worker() {
     while (index < needs.length) {
       const i = index++;
       try {
-        await enrichOneFromYahoo(needs[i], { bulk: options?.bulk });
+        await enrichOneFromYahoo(needs[i], {
+          skipDetailFallback: options?.skipDetailFallback,
+        });
       } catch {
         // 개별 종목 실패는 무시
       }
