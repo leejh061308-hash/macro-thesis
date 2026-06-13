@@ -10,6 +10,11 @@ import {
 } from "./metrics-service";
 import { enrichFundamentalsFromYahoo } from "./yahoo-fundamentals";
 import {
+  fundamentalCoverage,
+  isOverviewLikelyStale,
+  isUniverseFundamentallySparse,
+} from "./universe-health";
+import {
   computeStrategyScore,
   computeStyleTags,
   getSelectionNote,
@@ -62,6 +67,8 @@ import type {
 
 const DEFAULT_PORTFOLIO_SIZE = 20;
 
+const UNIVERSE_CACHE_VERSION = "v5";
+
 export async function getUniverseMetrics(
   universeId: UniverseId = "combined"
 ): Promise<QuantMetrics[]> {
@@ -69,10 +76,18 @@ export async function getUniverseMetrics(
     universeId === "combined"
       ? getUniverseTickers("combined")
       : getUniverseTickers(universeId);
-  const cacheKey = `universe-metrics-v4:${universeId}`;
+  const cacheKey = `universe-metrics-${UNIVERSE_CACHE_VERSION}:${universeId}`;
 
   const cached = getCached<QuantMetrics[]>(cacheKey);
-  if (cached) return cached;
+  if (cached?.length) {
+    if (isUniverseFundamentallySparse(cached)) {
+      await enrichFundamentalsFromYahoo(cached);
+      if (!isUniverseFundamentallySparse(cached)) {
+        setCached(cacheKey, cached, METRICS_CACHE_TTL);
+      }
+    }
+    return cached;
+  }
 
   const metrics = await fetchUniverseMetrics(tickers);
   if (metrics.length > 0) {
@@ -84,11 +99,17 @@ export async function getUniverseMetrics(
 }
 
 export async function getStrategyOverviews(): Promise<StrategyOverviewItem[]> {
-  const cacheKey = "strategy-overview-v3";
+  const cacheKey = "strategy-overview-v4";
   const cached = getCached<StrategyOverviewItem[]>(cacheKey);
-  if (cached?.length) return cached;
+  if (cached?.length && !isOverviewLikelyStale(cached)) return cached;
 
-  const universe = await getUniverseMetrics();
+  let universe = await getUniverseMetrics();
+  if (isUniverseFundamentallySparse(universe)) {
+    await enrichFundamentalsFromYahoo(universe);
+    const cacheKeyUniverse = `universe-metrics-${UNIVERSE_CACHE_VERSION}:combined`;
+    setCached(cacheKeyUniverse, universe, METRICS_CACHE_TTL);
+  }
+
   const overviews = computeAllStrategyOverviews(universe);
   const environments = await getStrategyEntryEnvironments();
 
@@ -102,7 +123,12 @@ export async function getStrategyOverviews(): Promise<StrategyOverviewItem[]> {
     };
   });
 
-  if (merged.length > 0) {
+  const coverage = fundamentalCoverage(universe);
+  if (
+    merged.length > 0 &&
+    !isOverviewLikelyStale(merged) &&
+    coverage >= 0.15
+  ) {
     setCached(cacheKey, merged, METRICS_CACHE_TTL);
   }
   return merged;

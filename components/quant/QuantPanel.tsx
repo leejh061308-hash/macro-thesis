@@ -4,10 +4,9 @@ import { useEffect, useState } from "react";
 import AdvancedQuantPanel from "./AdvancedQuantPanel";
 import StrategyDetailPanel from "./StrategyDetailPanel";
 import StrategyOverviewPanel from "./StrategyOverviewPanel";
-import ViewModeToggle from "./ViewModeToggle";
 import TodaysOpportunities from "@/components/timing/TodaysOpportunities";
 import { useQuantFavorites } from "@/hooks/useQuantFavorites";
-import { useQuantViewMode } from "@/hooks/useQuantViewMode";
+import type { QuantViewMode } from "@/lib/quant/basic-view";
 import type {
   FactorWeights,
   MultiFactorStrategyId,
@@ -15,12 +14,12 @@ import type {
   UniverseId,
 } from "@/lib/quant/types";
 
-export default function QuantPanel({
-  onHelpClick,
-}: {
-  onHelpClick?: () => void;
-}) {
-  const { mode, setMode, hydrated } = useQuantViewMode();
+interface QuantPanelProps {
+  mode: QuantViewMode;
+  modeHydrated: boolean;
+}
+
+export default function QuantPanel({ mode, modeHydrated }: QuantPanelProps) {
   const [selectedStrategyId, setSelectedStrategyId] = useState<StrategyId | null>(
     null
   );
@@ -49,7 +48,7 @@ export default function QuantPanel({
     if (mode === "advanced") setSelectedStrategyId(null);
   }, [mode]);
 
-  if (!hydrated) {
+  if (!modeHydrated) {
     return <div className="h-24 animate-pulse rounded-xl bg-surface-border/30" />;
   }
 
@@ -57,17 +56,6 @@ export default function QuantPanel({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <ViewModeToggle mode={mode} onChange={setMode} />
-        <button
-          type="button"
-          onClick={onHelpClick}
-          className="shrink-0 text-[10px] text-neutral underline-offset-2 hover:text-gray-300 hover:underline"
-        >
-          도움말
-        </button>
-      </div>
-
       {!finnhubConfigured && (
         <div className="rounded-lg border border-surface-border bg-surface-card px-3 py-2 text-[11px] text-neutral">
           Finnhub API 키가 없어 Yahoo Finance로 재무 데이터를 보완합니다. 일부

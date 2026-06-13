@@ -1,6 +1,7 @@
 import YahooFinance from "yahoo-finance2";
 import { withTimeout } from "@/lib/timeout";
 import type { QuantMetrics } from "./types";
+import type { StockDetail } from "@/lib/types";
 
 const yahooFinance = new YahooFinance({
   suppressNotices: ["yahooSurvey"],
@@ -13,7 +14,7 @@ const yahooFinance = new YahooFinance({
   },
 });
 
-const YAHOO_TIMEOUT = 12_000;
+const YAHOO_TIMEOUT = 15_000;
 const ENRICH_CONCURRENCY = 6;
 
 function num(v: unknown): number | null {
@@ -37,19 +38,32 @@ export function needsFundamentalEnrich(m: QuantMetrics): boolean {
   );
 }
 
-async function enrichOneFromYahoo(m: QuantMetrics): Promise<void> {
-  const summary = await withTimeout(
-    yahooFinance.quoteSummary(m.ticker, {
-      modules: ["summaryDetail", "financialData", "defaultKeyStatistics"],
-    }),
-    YAHOO_TIMEOUT,
-    "yahoo quant fundamentals"
-  );
-
-  const sd = summary.summaryDetail;
-  const fd = summary.financialData;
-  const ks = summary.defaultKeyStatistics;
-
+function applyFromQuoteSummary(
+  m: QuantMetrics,
+  sd: {
+    trailingPE?: number;
+    dividendYield?: number;
+    marketCap?: number;
+  } | undefined,
+  fd: {
+    returnOnEquity?: number;
+    returnOnAssets?: number;
+    debtToEquity?: number;
+    operatingMargins?: number;
+    profitMargins?: number;
+    revenueGrowth?: number;
+    earningsGrowth?: number;
+    freeCashflow?: number;
+  } | undefined,
+  ks: {
+    trailingPE?: number;
+    priceToBook?: number;
+    pegRatio?: number;
+    payoutRatio?: number;
+    beta?: number;
+    returnOnEquity?: number;
+  } | undefined
+): void {
   if (m.peRatio == null) {
     m.peRatio = num(sd?.trailingPE) ?? num(ks?.trailingPE);
   }
@@ -73,6 +87,54 @@ async function enrichOneFromYahoo(m: QuantMetrics): Promise<void> {
   }
   if (m.marketCap == null && marketCap != null) {
     m.marketCap = marketCap;
+  }
+}
+
+function applyFromStockDetail(m: QuantMetrics, detail: StockDetail): void {
+  if (m.peRatio == null) m.peRatio = detail.peRatio;
+  if (m.pbRatio == null) m.pbRatio = detail.pbRatio;
+  if (m.roe == null) m.roe = detail.roe;
+  if (m.debtToEquity == null) m.debtToEquity = detail.debtToEquity;
+  if (m.dividendYield == null) m.dividendYield = detail.dividendYield;
+  if (m.marketCap == null) m.marketCap = detail.marketCap;
+}
+
+async function enrichOneFromYahooLibrary(m: QuantMetrics): Promise<void> {
+  const summary = await withTimeout(
+    yahooFinance.quoteSummary(m.ticker, {
+      modules: ["summaryDetail", "financialData", "defaultKeyStatistics"],
+    }),
+    YAHOO_TIMEOUT,
+    "yahoo quant fundamentals"
+  );
+
+  applyFromQuoteSummary(
+    m,
+    summary.summaryDetail,
+    summary.financialData,
+    summary.defaultKeyStatistics
+  );
+}
+
+async function enrichOneFromStockDetail(m: QuantMetrics): Promise<void> {
+  const { fetchStockDetail } = await import("@/lib/yahoo");
+  const detail = await withTimeout(
+    fetchStockDetail(m.ticker),
+    YAHOO_TIMEOUT,
+    "yahoo detail fallback"
+  );
+  if (detail) applyFromStockDetail(m, detail);
+}
+
+async function enrichOneFromYahoo(m: QuantMetrics): Promise<void> {
+  try {
+    await enrichOneFromYahooLibrary(m);
+  } catch {
+    // quoteSummary library 실패 시 direct fetch 경로로
+  }
+
+  if (needsFundamentalEnrich(m)) {
+    await enrichOneFromStockDetail(m);
   }
 }
 
@@ -103,12 +165,11 @@ export async function enrichFundamentalsFromYahoo(
 export async function fetchYahooFundamentals(
   ticker: string
 ): Promise<Partial<QuantMetrics>> {
-  const partial: Partial<QuantMetrics> = { ticker };
   const stub = { ticker, name: ticker } as QuantMetrics;
   try {
     await enrichOneFromYahoo(stub);
     return stub;
   } catch {
-    return partial;
+    return { ticker };
   }
 }

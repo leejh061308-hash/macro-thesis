@@ -14,9 +14,9 @@ export default function QuantPage() {
         </p>
       </div>
 
-      <ResearchDisclaimer variant="quant" />
-
       <QuantPageClient />
+
+      <ResearchDisclaimer variant="quant" />
     </div>
   );
 }
