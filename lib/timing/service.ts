@@ -4,6 +4,7 @@ import {
 } from "@/lib/quant/cache";
 import { fetchTickerMetrics, fetchUniverseMetrics } from "@/lib/quant/metrics-service";
 import { getUniverseMetrics } from "@/lib/quant/service";
+import type { QuantMetrics } from "@/lib/quant/types";
 import { BASIC_STYLE_STRATEGY_IDS } from "@/lib/quant/constants";
 import { rankByStrategyFactor } from "@/lib/quant/strategy-factors";
 import { rankByStrategy, getStrategy } from "@/lib/quant/strategies";
@@ -187,23 +188,27 @@ export async function getWatchlistTiming(): Promise<WatchlistTimingItem[]> {
   return items.sort((a, b) => b.change - a.change);
 }
 
-export async function getStrategyEntryEnvironments(): Promise<
-  StrategyEntryEnvironment[]
-> {
-  const cacheKey = "timing:strategy-env-v2";
+export async function getStrategyEntryEnvironments(
+  universeOverride?: QuantMetrics[],
+  options?: { tickersPerStrategy?: number }
+): Promise<StrategyEntryEnvironment[]> {
+  const cacheKey = "timing:strategy-env-v3";
   const cached = getCached<StrategyEntryEnvironment[]>(cacheKey);
   if (cached?.length) return cached;
 
-  const universe = await getUniverseMetrics();
+  const universe = universeOverride ?? (await getUniverseMetrics());
+  const perStrategy = options?.tickersPerStrategy ?? 3;
 
   const results = await Promise.all(
     BASIC_STYLE_STRATEGY_IDS.map(async (strategyId) => {
       const def = getStrategy(strategyId);
-      const ranked = rankByStrategy(strategyId, universe, 8);
+      const ranked = rankByStrategy(strategyId, universe, perStrategy);
       const tickers =
         ranked.length > 0
           ? ranked.map((r) => r.ticker)
-          : rankByStrategyFactor(strategyId, universe, 8).map((r) => r.ticker);
+          : rankByStrategyFactor(strategyId, universe, perStrategy).map(
+              (r) => r.ticker
+            );
 
       let entryScore = 50;
       if (tickers.length > 0) {

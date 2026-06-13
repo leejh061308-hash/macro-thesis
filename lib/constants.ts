@@ -19,4 +19,4 @@ export const DATA_SOURCE_NOTE =
 
 /** 퀀트 첫 로드 예상 시간 안내 */
 export const QUANT_WARMUP_HINT =
-  "첫 방문 시 종목 데이터를 수집합니다. 약 30초~1분 정도 걸릴 수 있습니다.";
+  "대형주 50종목 기준으로 준비합니다. 보통 15~30초 정도 걸립니다.";

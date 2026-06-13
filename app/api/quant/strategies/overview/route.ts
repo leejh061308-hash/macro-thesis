@@ -1,13 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getStrategyOverviews } from "@/lib/quant/service";
 import { isMetricsAvailable } from "@/lib/quant/metrics-service";
 import { getQuantCacheStatus } from "@/lib/quant/warmup";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const overviews = await getStrategyOverviews();
+    const quick = request.nextUrl.searchParams.get("quick") === "1";
+    const overviews = await getStrategyOverviews({ includeEntry: !quick });
     return NextResponse.json({
       strategies: overviews,
+      partial: quick,
       metricsAvailable: isMetricsAvailable(),
       dataSources: {
         finnhub: isMetricsAvailable(),

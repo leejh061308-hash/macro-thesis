@@ -14,8 +14,9 @@ const yahooFinance = new YahooFinance({
   },
 });
 
-const YAHOO_TIMEOUT = 15_000;
-const ENRICH_CONCURRENCY = 6;
+const YAHOO_TIMEOUT = 10_000;
+const ENRICH_CONCURRENCY = 10;
+const BULK_ENRICH_CONCURRENCY = 12;
 
 function num(v: unknown): number | null {
   if (typeof v !== "number" || !Number.isFinite(v)) return null;
@@ -126,31 +127,42 @@ async function enrichOneFromStockDetail(m: QuantMetrics): Promise<void> {
   if (detail) applyFromStockDetail(m, detail);
 }
 
-async function enrichOneFromYahoo(m: QuantMetrics): Promise<void> {
+async function enrichOneFromYahoo(
+  m: QuantMetrics,
+  options?: { bulk?: boolean }
+): Promise<void> {
   try {
     await enrichOneFromYahooLibrary(m);
   } catch {
-    // quoteSummary library 실패 시 direct fetch 경로로
+    // quoteSummary library 실패
   }
 
-  if (needsFundamentalEnrich(m)) {
+  if (!options?.bulk && needsFundamentalEnrich(m)) {
     await enrichOneFromStockDetail(m);
   }
 }
 
+export interface EnrichFundamentalsOptions {
+  /** 대량 보완 시 느린 fallback 생략 */
+  bulk?: boolean;
+  concurrency?: number;
+}
+
 /** Finnhub metric 누락 시 Yahoo quoteSummary로 재무 지표 보완 */
 export async function enrichFundamentalsFromYahoo(
-  metrics: QuantMetrics[]
+  metrics: QuantMetrics[],
+  options?: EnrichFundamentalsOptions
 ): Promise<void> {
   const needs = metrics.filter(needsFundamentalEnrich);
   if (needs.length === 0) return;
 
+  const concurrency = options?.concurrency ?? (options?.bulk ? BULK_ENRICH_CONCURRENCY : ENRICH_CONCURRENCY);
   let index = 0;
   async function worker() {
     while (index < needs.length) {
       const i = index++;
       try {
-        await enrichOneFromYahoo(needs[i]);
+        await enrichOneFromYahoo(needs[i], { bulk: options?.bulk });
       } catch {
         // 개별 종목 실패는 무시
       }
@@ -158,7 +170,7 @@ export async function enrichFundamentalsFromYahoo(
   }
 
   await Promise.all(
-    Array.from({ length: Math.min(ENRICH_CONCURRENCY, needs.length) }, worker)
+    Array.from({ length: Math.min(concurrency, needs.length) }, worker)
   );
 }
 

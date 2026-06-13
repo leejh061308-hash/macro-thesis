@@ -6,8 +6,10 @@ import {
 } from "./cache";
 import {
   enrichMomentumFromPrices,
-  fetchUniverseMetrics,
+  enrichScoringPool,
+  fetchUniverseProfiles,
 } from "./metrics-service";
+import { getScoringTickerList, selectScoringUniverse } from "./scoring-universe";
 import { enrichFundamentalsFromYahoo } from "./yahoo-fundamentals";
 import {
   fundamentalCoverage,
@@ -67,51 +69,118 @@ import type {
 
 const DEFAULT_PORTFOLIO_SIZE = 20;
 
-const UNIVERSE_CACHE_VERSION = "v5";
+const UNIVERSE_CACHE_VERSION = "v6";
+const SCORING_CACHE_KEY = `scoring-metrics-${UNIVERSE_CACHE_VERSION}`;
+const OVERVIEW_CACHE_KEY = "strategy-overview-v5";
+
+let fullUniverseInFlight: Promise<void> | null = null;
+
+function triggerFullUniverseBackground(): void {
+  if (fullUniverseInFlight) return;
+  fullUniverseInFlight = enrichFullUniverse("combined")
+    .then(() => undefined)
+    .finally(() => {
+      fullUniverseInFlight = null;
+    });
+}
+
+async function enrichFullUniverse(universeId: UniverseId = "combined"): Promise<void> {
+  const tickers = getUniverseTickers(universeId);
+  const cacheKey = `universe-metrics-${UNIVERSE_CACHE_VERSION}:${universeId}`;
+  const cached = getCached<QuantMetrics[]>(cacheKey);
+  if (cached?.length && !isUniverseFundamentallySparse(cached)) return;
+
+  const metrics = cached?.length ? cached : await fetchUniverseProfiles(tickers);
+  const pool = selectScoringUniverse(metrics);
+  const poolSet = new Set(pool.map((m) => m.ticker));
+  const rest = metrics.filter((m) => !poolSet.has(m.ticker));
+
+  if (!cached?.length) {
+    await enrichScoringPool(pool);
+  } else if (isUniverseFundamentallySparse(pool)) {
+    await enrichScoringPool(pool);
+  }
+
+  if (rest.length > 0) {
+    await enrichFundamentalsFromYahoo(rest, { bulk: true, concurrency: 8 });
+    await enrichMomentumFromPrices(rest, { range: "3y", concurrency: 6 });
+  }
+
+  setCached(cacheKey, metrics, METRICS_CACHE_TTL);
+}
+
+/** 기본 탭·전략 카드용 — 대형주 50종목만 빠르게 준비 */
+export async function getScoringUniverseMetrics(): Promise<QuantMetrics[]> {
+  const cached = getCached<QuantMetrics[]>(SCORING_CACHE_KEY);
+  if (cached?.length && !isUniverseFundamentallySparse(cached)) {
+    triggerFullUniverseBackground();
+    return cached;
+  }
+
+  const tickers = getScoringTickerList();
+  const metrics = await fetchUniverseProfiles(tickers);
+  await enrichScoringPool(metrics);
+  setCached(SCORING_CACHE_KEY, metrics, METRICS_CACHE_TTL);
+  triggerFullUniverseBackground();
+  return metrics;
+}
 
 export async function getUniverseMetrics(
   universeId: UniverseId = "combined"
 ): Promise<QuantMetrics[]> {
-  const tickers =
-    universeId === "combined"
-      ? getUniverseTickers("combined")
-      : getUniverseTickers(universeId);
   const cacheKey = `universe-metrics-${UNIVERSE_CACHE_VERSION}:${universeId}`;
 
   const cached = getCached<QuantMetrics[]>(cacheKey);
-  if (cached?.length) {
-    if (isUniverseFundamentallySparse(cached)) {
-      await enrichFundamentalsFromYahoo(cached);
-      if (!isUniverseFundamentallySparse(cached)) {
-        setCached(cacheKey, cached, METRICS_CACHE_TTL);
-      }
-    }
+  if (cached?.length && !isUniverseFundamentallySparse(cached)) {
     return cached;
   }
 
-  const metrics = await fetchUniverseMetrics(tickers);
-  if (metrics.length > 0) {
-    await enrichFundamentalsFromYahoo(metrics);
-    await enrichMomentumFromPrices(metrics);
-    setCached(cacheKey, metrics, METRICS_CACHE_TTL);
+  if (universeId === "combined") {
+    const scoring = getCached<QuantMetrics[]>(SCORING_CACHE_KEY);
+    if (scoring?.length && !isUniverseFundamentallySparse(scoring)) {
+      triggerFullUniverseBackground();
+      if (cached?.length) return cached;
+      // scoring pool만 있고 full cache 없으면 background에서 full 채움
+      await enrichFullUniverse(universeId);
+      return getCached<QuantMetrics[]>(cacheKey) ?? scoring;
+    }
   }
-  return metrics;
+
+  await enrichFullUniverse(universeId);
+  return getCached<QuantMetrics[]>(cacheKey) ?? [];
 }
 
-export async function getStrategyOverviews(): Promise<StrategyOverviewItem[]> {
-  const cacheKey = "strategy-overview-v4";
-  const cached = getCached<StrategyOverviewItem[]>(cacheKey);
-  if (cached?.length && !isOverviewLikelyStale(cached)) return cached;
-
-  let universe = await getUniverseMetrics();
-  if (isUniverseFundamentallySparse(universe)) {
-    await enrichFundamentalsFromYahoo(universe);
-    const cacheKeyUniverse = `universe-metrics-${UNIVERSE_CACHE_VERSION}:combined`;
-    setCached(cacheKeyUniverse, universe, METRICS_CACHE_TTL);
+export async function getStrategyOverviews(options?: {
+  includeEntry?: boolean;
+}): Promise<StrategyOverviewItem[]> {
+  const includeEntry = options?.includeEntry !== false;
+  const cached = getCached<StrategyOverviewItem[]>(OVERVIEW_CACHE_KEY);
+  if (
+    cached?.length &&
+    !isOverviewLikelyStale(cached) &&
+    (!includeEntry || cached.every((o) => o.entryScore > 0))
+  ) {
+    return cached;
   }
 
+  const universe = await getScoringUniverseMetrics();
   const overviews = computeAllStrategyOverviews(universe);
-  const environments = await getStrategyEntryEnvironments();
+
+  if (!includeEntry) {
+    return overviews.map((o) => ({
+      ...o,
+      entryScore: 0,
+      entryLabel: "…",
+    }));
+  }
+
+  const entryCached = getCached<
+    Awaited<ReturnType<typeof getStrategyEntryEnvironments>>
+  >("timing:strategy-env-v3");
+
+  const environments = entryCached?.length
+    ? entryCached
+    : await getStrategyEntryEnvironments(universe);
 
   const merged = overviews.map((o) => {
     const env = environments.find((e) => e.strategyId === o.id);
@@ -129,7 +198,7 @@ export async function getStrategyOverviews(): Promise<StrategyOverviewItem[]> {
     !isOverviewLikelyStale(merged) &&
     coverage >= 0.15
   ) {
-    setCached(cacheKey, merged, METRICS_CACHE_TTL);
+    setCached(OVERVIEW_CACHE_KEY, merged, METRICS_CACHE_TTL);
   }
   return merged;
 }
@@ -192,7 +261,7 @@ export async function getStrategyResults(
   strategyId: StrategyId,
   limit = 20
 ): Promise<StrategyResult[]> {
-  const universe = await getUniverseMetrics();
+  const universe = await getScoringUniverseMetrics();
   return rankByStrategy(strategyId, universe, limit);
 }
 

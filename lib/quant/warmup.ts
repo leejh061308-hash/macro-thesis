@@ -3,7 +3,7 @@ import { getStrategyOverviews } from "./service";
 
 export type QuantCacheStatus = "ready" | "warming" | "cold";
 
-const OVERVIEW_CACHE_KEY = "strategy-overview-v4";
+const OVERVIEW_CACHE_KEY = "strategy-overview-v5";
 
 let warmInFlight: Promise<void> | null = null;
 
@@ -21,7 +21,7 @@ export function ensureQuantCacheWarm(): Promise<void> {
   }
 
   if (!warmInFlight) {
-    warmInFlight = getStrategyOverviews()
+    warmInFlight = getStrategyOverviews({ includeEntry: false })
       .then(() => undefined)
       .finally(() => {
         warmInFlight = null;

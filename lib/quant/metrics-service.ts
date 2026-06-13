@@ -4,9 +4,9 @@ import { UNIVERSE_NAMES } from "./universe";
 import { needsFundamentalEnrich, enrichFundamentalsFromYahoo } from "./yahoo-fundamentals";
 import type { QuantMetrics } from "./types";
 
-const FINNHUB_TIMEOUT = 8_000;
+const FINNHUB_TIMEOUT = 6_000;
 const FINNHUB_API = "https://finnhub.io/api/v1";
-const FETCH_CONCURRENCY = 4;
+const PROFILE_CONCURRENCY = 10;
 
 function getToken(): string | null {
   return process.env.FINNHUB_API_KEY?.trim() || null;
@@ -46,26 +46,70 @@ function returnPct(v: unknown): number | null {
   return Math.abs(n) > 1 ? n / 100 : n;
 }
 
-async function fetchOne(ticker: string): Promise<QuantMetrics | null> {
-  const [profile, metrics] = await Promise.all([
-    finnhubGet<{ name?: string; marketCapitalization?: number }>(
-      `/stock/profile2?symbol=${encodeURIComponent(ticker)}`
-    ),
-    finnhubGet<{ metric?: Record<string, number | null> }>(
-      `/stock/metric?symbol=${encodeURIComponent(ticker)}&metric=all`
-    ),
-  ]);
+function emptyMetrics(ticker: string, name: string, marketCap: number | null): QuantMetrics {
+  return {
+    ticker,
+    name,
+    marketCap,
+    peRatio: null,
+    pbRatio: null,
+    evToEbitda: null,
+    revenueGrowth: null,
+    epsGrowth: null,
+    operatingMargin: null,
+    netMargin: null,
+    dividendYield: null,
+    dividendGrowth: null,
+    payoutRatio: null,
+    roe: null,
+    roic: null,
+    debtToEquity: null,
+    beta: null,
+    volatility: null,
+    maxDrawdown: null,
+    pegRatio: null,
+    freeCashFlowYield: null,
+    return3m: null,
+    return6m: null,
+    return12m: null,
+    relativeStrength: null,
+    earningsStability: null,
+    cashFlowStability: null,
+  };
+}
 
+/** 프로필만 빠르게 — metric API 생략 (프로덕션에서 metric 누락 시 지연만 유발) */
+async function fetchProfileOnly(ticker: string): Promise<QuantMetrics | null> {
+  const profile = getToken()
+    ? await finnhubGet<{ name?: string; marketCapitalization?: number }>(
+        `/stock/profile2?symbol=${encodeURIComponent(ticker)}`
+      )
+    : null;
+
+  const name = profile?.name ?? UNIVERSE_NAMES[ticker] ?? ticker;
+  const marketCap =
+    profile?.marketCapitalization != null
+      ? profile.marketCapitalization * 1_000_000
+      : null;
+
+  return emptyMetrics(ticker, name, marketCap);
+}
+
+async function fetchOne(ticker: string): Promise<QuantMetrics | null> {
+  const profileOnly = await fetchProfileOnly(ticker);
+  if (!profileOnly || !getToken()) return profileOnly;
+
+  const metrics = await finnhubGet<{ metric?: Record<string, number | null> }>(
+    `/stock/metric?symbol=${encodeURIComponent(ticker)}&metric=all`
+  );
   const m = metrics?.metric ?? {};
+  if (Object.keys(m).length === 0) return profileOnly;
   const ev = num(m.enterpriseValue);
   const ebitda = num(m.ebitda);
   const evToEbitda =
     ev != null && ebitda != null && ebitda > 0 ? ev / ebitda : null;
 
-  const marketCap =
-    profile?.marketCapitalization != null
-      ? profile.marketCapitalization * 1_000_000
-      : null;
+  const marketCap = profileOnly.marketCap;
 
   const peRatio = num(m.peBasic) ?? num(m.peTTM);
   const epsGrowth = pct(m.epsGrowthTTMYoy) ?? pct(m.epsGrowth3Y);
@@ -104,8 +148,7 @@ async function fetchOne(ticker: string): Promise<QuantMetrics | null> {
       : pct(m.operatingMarginTTM);
 
   return {
-    ticker,
-    name: profile?.name ?? UNIVERSE_NAMES[ticker] ?? ticker,
+    ...profileOnly,
     peRatio,
     pbRatio: num(m.pbAnnual) ?? num(m.pbQuarterly),
     evToEbitda,
@@ -158,9 +201,12 @@ async function mapConcurrent<T, R>(
 
 /** Finnhub에 모멘텀 데이터가 없을 때 Yahoo 월간 시세로 보완 */
 export async function enrichMomentumFromPrices(
-  metrics: QuantMetrics[]
+  metrics: QuantMetrics[],
+  options?: { range?: "3y" | "5y" | "10y"; concurrency?: number }
 ): Promise<void> {
-  const spyPrices = await fetchMonthlyPrices("SPY", "10y");
+  const range = options?.range ?? "3y";
+  const concurrency = options?.concurrency ?? 8;
+  const spyPrices = await fetchMonthlyPrices("SPY", range);
   const spyReturn12m = computeTrailingReturn(spyPrices, 12);
 
   const needsEnrich = metrics.filter(
@@ -169,12 +215,11 @@ export async function enrichMomentumFromPrices(
   if (needsEnrich.length === 0) return;
 
   let index = 0;
-  const concurrency = 3;
   async function worker() {
     while (index < needsEnrich.length) {
       const i = index++;
       const m = needsEnrich[i];
-      const prices = await fetchMonthlyPrices(m.ticker, "10y");
+      const prices = await fetchMonthlyPrices(m.ticker, range);
       if (prices.length < 4) continue;
 
       if (m.return3m == null) m.return3m = computeTrailingReturn(prices, 3);
@@ -212,10 +257,24 @@ export async function fetchTickerMetrics(
   return base;
 }
 
+export async function fetchUniverseProfiles(
+  tickers: string[]
+): Promise<QuantMetrics[]> {
+  const results = await mapConcurrent(tickers, PROFILE_CONCURRENCY, fetchProfileOnly);
+  return results.filter((m): m is QuantMetrics => m != null);
+}
+
+export async function enrichScoringPool(metrics: QuantMetrics[]): Promise<void> {
+  await Promise.all([
+    enrichFundamentalsFromYahoo(metrics, { bulk: true, concurrency: 12 }),
+    enrichMomentumFromPrices(metrics, { range: "3y", concurrency: 8 }),
+  ]);
+}
+
 export async function fetchUniverseMetrics(
   tickers: string[]
 ): Promise<QuantMetrics[]> {
-  const results = await mapConcurrent(tickers, FETCH_CONCURRENCY, fetchOne);
+  const results = await mapConcurrent(tickers, PROFILE_CONCURRENCY, fetchProfileOnly);
   return results.filter((m): m is QuantMetrics => m != null);
 }
 

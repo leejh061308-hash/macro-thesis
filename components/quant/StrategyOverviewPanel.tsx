@@ -17,6 +17,7 @@ export default function StrategyOverviewPanel({
 }: StrategyOverviewPanelProps) {
   const [strategies, setStrategies] = useState<StrategyOverviewItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [entryLoading, setEntryLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -25,30 +26,65 @@ export default function StrategyOverviewPanel({
     );
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 180_000);
+    const timeout = setTimeout(() => controller.abort(), 90_000);
+    let cancelled = false;
 
-    fetch("/api/quant/strategies/overview", {
-      cache: "no-store",
-      signal: controller.signal,
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.error) throw new Error(data.error);
-        setStrategies(data.strategies ?? []);
-      })
-      .catch((e) => {
+    async function load() {
+      try {
+        const overviewPromise = fetch(
+          "/api/quant/strategies/overview?quick=1",
+          { cache: "no-store", signal: controller.signal }
+        ).then((res) => res.json());
+
+        const entryPromise = fetch("/api/timing/strategy-environment", {
+          cache: "no-store",
+          signal: controller.signal,
+        }).then((res) => res.json());
+
+        const overviewData = await overviewPromise;
+        if (cancelled) return;
+        if (overviewData.error) throw new Error(overviewData.error);
+
+        setStrategies(overviewData.strategies ?? []);
+        setLoading(false);
+
+        const entryData = await entryPromise;
+        if (cancelled) return;
+
+        const environments = entryData.environments ?? [];
+        setStrategies((prev) =>
+          prev.map((s) => {
+            const env = environments.find(
+              (e: { strategyId: string }) => e.strategyId === s.id
+            );
+            if (!env) return s;
+            return {
+              ...s,
+              entryScore: env.entryScore,
+              entryLabel: env.entryLabel,
+            };
+          })
+        );
+      } catch (e) {
+        if (cancelled) return;
         if (e instanceof Error && e.name === "AbortError") {
           setError("데이터 준비 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.");
-          return;
+        } else {
+          setError(e instanceof Error ? e.message : "로드 실패");
         }
-        setError(e instanceof Error ? e.message : "로드 실패");
-      })
-      .finally(() => {
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+          setEntryLoading(false);
+        }
         clearTimeout(timeout);
-        setLoading(false);
-      });
+      }
+    }
+
+    void load();
 
     return () => {
+      cancelled = true;
       clearTimeout(timeout);
       controller.abort();
     };
@@ -82,6 +118,7 @@ export default function StrategyOverviewPanel({
             <StrategyCard
               key={s.id}
               strategy={s}
+              entryLoading={entryLoading && s.entryLabel === "…"}
               onClick={() => onSelectStrategy(s.id)}
             />
           ))}
@@ -93,9 +130,11 @@ export default function StrategyOverviewPanel({
 
 function StrategyCard({
   strategy,
+  entryLoading,
   onClick,
 }: {
   strategy: StrategyOverviewItem;
+  entryLoading: boolean;
   onClick: () => void;
 }) {
   return (
@@ -121,11 +160,17 @@ function StrategyCard({
         </div>
         <div>
           <p className="text-[10px] text-neutral">현재 진입 환경</p>
-          <p className="font-mono text-lg font-bold text-white">
-            {strategy.entryScore}
-            <span className="text-xs font-normal text-neutral">점</span>
-          </p>
-          <p className="text-[10px] text-neutral">{strategy.entryLabel}</p>
+          {entryLoading ? (
+            <p className="mt-1 text-xs text-neutral animate-pulse">계산 중…</p>
+          ) : (
+            <>
+              <p className="font-mono text-lg font-bold text-white">
+                {strategy.entryScore}
+                <span className="text-xs font-normal text-neutral">점</span>
+              </p>
+              <p className="text-[10px] text-neutral">{strategy.entryLabel}</p>
+            </>
+          )}
         </div>
       </div>
       <p className="mt-2 text-xs leading-relaxed text-gray-400 line-clamp-2">

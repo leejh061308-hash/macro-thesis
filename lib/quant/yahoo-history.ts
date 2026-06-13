@@ -24,12 +24,13 @@ export interface PricePoint {
 
 export async function fetchMonthlyPrices(
   ticker: string,
-  range: "5y" | "10y" | "max" = "10y"
+  range: "3y" | "5y" | "10y" | "max" = "10y"
 ): Promise<PricePoint[]> {
+  const yahooRange = range === "3y" ? "5y" : range;
   const encoded = encodeURIComponent(ticker);
   const urls = YAHOO_HOSTS.map(
     (host) =>
-      `${host}/v8/finance/chart/${encoded}?interval=1mo&range=${range}&includePrePost=false`
+      `${host}/v8/finance/chart/${encoded}?interval=1mo&range=${yahooRange}&includePrePost=false`
   );
 
   for (const url of urls) {
