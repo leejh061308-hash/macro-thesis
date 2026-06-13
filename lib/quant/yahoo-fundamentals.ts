@@ -34,13 +34,14 @@ function pct(v: unknown): number | null {
   return Math.abs(n) > 1 ? n / 100 : n;
 }
 
+export function needsCoreFundamentalEnrich(m: QuantMetrics): boolean {
+  return m.peRatio == null && m.pbRatio == null && m.roe == null;
+}
+
 export function needsFundamentalEnrich(m: QuantMetrics): boolean {
   return (
-    m.peRatio == null ||
-    m.pbRatio == null ||
-    m.roe == null ||
-    m.revenueGrowth == null ||
-    m.epsGrowth == null ||
+    needsCoreFundamentalEnrich(m) ||
+    needsGrowthEnrich(m) ||
     m.operatingMargin == null
   );
 }

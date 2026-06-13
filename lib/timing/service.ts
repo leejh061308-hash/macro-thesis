@@ -3,7 +3,7 @@ import {
   setCached,
 } from "@/lib/quant/cache";
 import { fetchTickerMetrics } from "@/lib/quant/metrics-service";
-import { getScoringUniverseMetrics, getUniverseMetrics } from "@/lib/quant/service";
+import { getScoringUniverseMetrics, getCachedScoringUniverse, getUniverseMetrics } from "@/lib/quant/service";
 import { isEntryEnvLikelyStale } from "@/lib/quant/universe-health";
 import type { QuantMetrics } from "@/lib/quant/types";
 import { BASIC_STYLE_STRATEGY_IDS } from "@/lib/quant/constants";
@@ -29,6 +29,8 @@ import type {
 const TIMING_CACHE_TTL = 30 * 60 * 1000;
 
 async function getUniverseForScoring(): Promise<import("@/lib/quant/types").QuantMetrics[]> {
+  const cached = getCachedScoringUniverse();
+  if (cached) return cached;
   return getScoringUniverseMetrics();
 }
 

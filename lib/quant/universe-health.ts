@@ -1,13 +1,20 @@
 import type { QuantMetrics } from "./types";
-import { needsFundamentalEnrich, needsGrowthEnrich } from "./yahoo-fundamentals";
+import { needsGrowthEnrich } from "./yahoo-fundamentals";
 
 const MIN_FUNDAMENTAL_COVERAGE = 0.2;
 const MIN_GROWTH_COVERAGE = 0.3;
 
+/** 밸류에이션 + 수익성 지표가 최소 한 쌍 이상 채워졌는지 */
+export function hasCoreFundamentals(m: QuantMetrics): boolean {
+  const hasValue = m.peRatio != null || m.pbRatio != null;
+  const hasQuality = m.roe != null || m.operatingMargin != null;
+  return hasValue && hasQuality;
+}
+
 /** 유니버스 중 핵심 재무 지표가 채워진 종목 비율 (0~1) */
 export function fundamentalCoverage(metrics: QuantMetrics[]): number {
   if (metrics.length === 0) return 0;
-  const covered = metrics.filter((m) => !needsFundamentalEnrich(m)).length;
+  const covered = metrics.filter(hasCoreFundamentals).length;
   return covered / metrics.length;
 }
 
