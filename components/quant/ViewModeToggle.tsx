@@ -16,20 +16,20 @@ const MODES: Array<{
   {
     id: "basic",
     label: "기본",
-    description: "8대 전략 카드 · TOP 10 · 백테스트",
+    description: "투자 아이디어 · 전략 · TOP 10",
     icon: "◈",
   },
   {
     id: "advanced",
     label: "고급",
-    description: "팩터 랭킹 · 가중치 · 스크리너",
+    description: "멀티팩터 · 시각화 · 백테스트",
     icon: "◆",
   },
 ];
 
 export default function ViewModeToggle({ mode, onChange }: ViewModeToggleProps) {
   return (
-    <div className="grid grid-cols-2 gap-2">
+    <div className="grid grid-cols-2 gap-2 rounded-card bg-surface-card p-1 shadow-card">
       {MODES.map((item) => {
         const active = mode === item.id;
         return (
@@ -37,27 +37,37 @@ export default function ViewModeToggle({ mode, onChange }: ViewModeToggleProps) 
             key={item.id}
             type="button"
             onClick={() => onChange(item.id)}
-            className={`rounded-xl border-2 px-4 py-3.5 text-left transition-all ${
+            className={`rounded-[12px] px-3 py-3 text-left transition-all duration-200 ${
               active
-                ? "border-accent bg-accent/15 shadow-[0_0_20px_rgba(34,211,238,0.12)]"
-                : "border-surface-border bg-surface-card hover:border-surface-border/80 hover:bg-surface-card/80"
+                ? item.id === "advanced"
+                  ? "bg-accent-secondary/20 shadow-card"
+                  : "bg-accent/15 shadow-card"
+                : "hover:bg-white/5"
             }`}
           >
             <div className="flex items-center gap-2">
               <span
-                className={`font-mono text-lg ${active ? "text-accent" : "text-neutral"}`}
+                className={`text-lg ${
+                  active
+                    ? item.id === "advanced"
+                      ? "text-accent-secondary"
+                      : "text-accent"
+                    : "text-muted"
+                }`}
               >
                 {item.icon}
               </span>
               <span
-                className={`text-base font-bold ${active ? "text-white" : "text-gray-300"}`}
+                className={`text-sm font-bold ${
+                  active ? "text-text" : "text-text-secondary"
+                }`}
               >
                 {item.label}
               </span>
             </div>
             <p
-              className={`mt-1.5 text-[11px] leading-snug ${
-                active ? "text-gray-300" : "text-neutral"
+              className={`mt-1 text-[10px] leading-snug ${
+                active ? "text-text-secondary" : "text-muted"
               }`}
             >
               {item.description}

@@ -1,48 +1,50 @@
 "use client";
 
+import ScoreGauge from "@/components/ui/ScoreGauge";
+import Card from "@/components/ui/Card";
 import type { TimingScoreResult } from "@/lib/timing/types";
-
-const COLOR_MAP = {
-  accent: "text-accent border-accent/30 bg-accent/10",
-  bullish: "text-bullish border-bullish/30 bg-bullish/10",
-  neutral: "text-neutral border-surface-border bg-surface-card",
-  bearish: "text-bearish border-bearish/30 bg-bearish/10",
-};
 
 interface ScoreCardsProps {
   timing: TimingScoreResult;
 }
 
-export default function ScoreCards({ timing }: ScoreCardsProps) {
-  return (
-    <div className="grid grid-cols-2 gap-3">
-      <div className="rounded-xl border border-surface-border bg-surface-card p-4 card-glow">
-        <p className="text-[11px] text-neutral">기업 점수</p>
-        <p className="mt-1 font-mono text-3xl font-bold text-white">
-          {timing.companyScore}
-          <span className="ml-1 text-sm font-normal text-neutral">점</span>
-        </p>
-        <p className="mt-1 text-xs font-semibold text-accent">
-          {timing.companyLabel}
-        </p>
-        <p className="mt-2 text-[10px] leading-relaxed text-gray-500">
-          기업의 질 · 재무·경쟁력
-        </p>
-      </div>
+function riskFromVolatility(volatility: number): {
+  label: string;
+  color: string;
+} {
+  if (volatility >= 70) return { label: "높음", color: "text-bearish" };
+  if (volatility >= 40) return { label: "보통", color: "text-warning" };
+  return { label: "낮음", color: "text-bullish" };
+}
 
-      <div
-        className={`rounded-xl border p-4 card-glow ${COLOR_MAP[timing.timingColor]}`}
-      >
-        <p className="text-[11px] opacity-80">진입 점수</p>
-        <p className="mt-1 font-mono text-3xl font-bold">
-          {timing.timingScore}
-          <span className="ml-1 text-sm font-normal opacity-70">점</span>
-        </p>
-        <p className="mt-1 text-xs font-semibold">{timing.timingLabel}</p>
-        <p className="mt-2 text-[10px] leading-relaxed opacity-70">
-          현재 진입 매력도
-        </p>
-      </div>
+export default function ScoreCards({ timing }: ScoreCardsProps) {
+  const risk = riskFromVolatility(timing.breakdown.volatility);
+
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      <Card padding="sm" className="flex flex-col items-center">
+        <ScoreGauge
+          score={timing.companyScore}
+          label="AI 추천도"
+          sublabel={timing.companyLabel}
+          size="sm"
+        />
+      </Card>
+
+      <Card padding="sm" className="flex flex-col items-center">
+        <ScoreGauge
+          score={timing.timingScore}
+          label="투자 매력도"
+          sublabel={timing.timingLabel}
+          size="sm"
+        />
+      </Card>
+
+      <Card padding="sm" className="flex flex-col items-center justify-center text-center">
+        <p className="text-[10px] text-muted">위험도</p>
+        <p className={`mt-3 text-lg font-bold ${risk.color}`}>{risk.label}</p>
+        <p className="mt-1 text-[10px] text-muted">변동성 기준</p>
+      </Card>
     </div>
   );
 }

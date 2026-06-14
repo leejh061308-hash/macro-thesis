@@ -2,24 +2,89 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: "Pretendard Variable";
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+  src: url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/woff2/PretendardVariable.woff2")
+    format("woff2-variations");
+}
+
 @layer base {
   body {
-    @apply bg-surface text-gray-100 antialiased;
+    @apply bg-surface text-text antialiased;
+    font-feature-settings: "ss01", "ss02";
   }
 
   ::selection {
-    @apply bg-accent/30 text-white;
+    @apply bg-accent/25 text-white;
   }
 
   * {
     scrollbar-width: thin;
-    scrollbar-color: #30363d transparent;
+    scrollbar-color: rgba(148, 163, 184, 0.3) transparent;
   }
 }
 
-@layer utilities {
-  .card-glow {
-    box-shadow: 0 0 0 1px rgba(48, 54, 61, 0.8),
-      0 4px 24px rgba(0, 0, 0, 0.4);
+@layer components {
+  .card {
+    @apply rounded-card bg-surface-card shadow-card;
+  }
+
+  .card-interactive {
+    @apply card transition-all duration-200 hover:shadow-card-hover active:scale-[0.99];
+  }
+
+  .section-title {
+    @apply text-base font-bold text-text;
+  }
+
+  .section-subtitle {
+    @apply text-xs text-muted;
+  }
+
+  .pill {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-medium;
+  }
+
+  .pill-blue {
+    @apply pill bg-accent/15 text-accent;
+  }
+
+  .pill-purple {
+    @apply pill bg-accent-secondary/15 text-accent-secondary;
+  }
+
+  .pill-green {
+    @apply pill bg-bullish/15 text-bullish;
+  }
+
+  .animate-stagger > * {
+    @apply animate-slide-up;
+  }
+
+  .animate-stagger > *:nth-child(1) {
+    animation-delay: 0ms;
+  }
+  .animate-stagger > *:nth-child(2) {
+    animation-delay: 60ms;
+  }
+  .animate-stagger > *:nth-child(3) {
+    animation-delay: 120ms;
+  }
+  .animate-stagger > *:nth-child(4) {
+    animation-delay: 180ms;
+  }
+  .animate-stagger > *:nth-child(5) {
+    animation-delay: 240ms;
+  }
+
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 }

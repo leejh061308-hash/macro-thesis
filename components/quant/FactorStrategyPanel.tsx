@@ -61,7 +61,7 @@ export default function FactorStrategyPanel({
   const selectedStrategy = strategies.find((s) => s.id === selectedId);
 
   return (
-    <div className="space-y-4 rounded-xl border border-surface-border bg-surface-card p-4 card-glow">
+    <div className="space-y-4 rounded-card bg-surface-card p-4 shadow-card">
       <div>
         <h3 className="text-sm font-bold text-white">
           {isBasic ? "추천 전략" : "멀티팩터 전략"}

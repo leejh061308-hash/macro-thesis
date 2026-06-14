@@ -8,9 +8,9 @@ export default function QuantPage() {
       <WarmupTrigger />
 
       <div>
-        <h2 className="text-lg font-bold text-white">AI 투자</h2>
-        <p className="text-xs text-gray-400">
-          전략 · 순위 · 진입 환경 · 백테스트 · AI 해석
+        <h2 className="text-xl font-bold text-text">퀀트 분석</h2>
+        <p className="text-xs text-muted">
+          AI가 정리한 전략 · 순위 · 백테스트
         </p>
       </div>
 

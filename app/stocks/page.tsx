@@ -204,10 +204,10 @@ export default function StocksPage() {
       <WarmupTrigger />
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-bold text-white">관심종목</h2>
-          <p className="text-[11px] text-gray-500">
-            시세는 정규장(본장) 기준입니다. 장외마켓은 반영하지 않습니다.
-          </p>
+        <h2 className="text-xl font-bold text-text">관심종목</h2>
+        <p className="text-xs text-muted">
+          시세는 정규장(본장) 기준입니다
+        </p>
           {isLoading ? (
             <p className="mt-1 text-xs text-neutral">시세 불러오는 중...</p>
           ) : (

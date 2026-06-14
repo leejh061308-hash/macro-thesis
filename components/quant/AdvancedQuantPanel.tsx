@@ -1,6 +1,8 @@
 "use client";
 
 import FactorBacktestPanel from "./FactorBacktestPanel";
+import FactorHeatmapVisual from "./FactorHeatmapVisual";
+import FactorRadarChart from "./FactorRadarChart";
 import FactorStrategyPanel from "./FactorStrategyPanel";
 import RankingPanel from "./RankingPanel";
 import { MULTI_FACTOR_STRATEGIES } from "@/lib/quant/multi-factor";
@@ -48,7 +50,19 @@ export default function AdvancedQuantPanel({
         "올팩터");
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      <div className="rounded-card bg-gradient-to-br from-accent-secondary/10 to-accent/5 p-4 shadow-card">
+        <p className="text-xs font-semibold text-accent-secondary">전문가 모드</p>
+        <p className="mt-1 text-sm text-text-secondary">
+          멀티팩터 분석 · 시각화 중심 퀀트 연구
+        </p>
+      </div>
+
+      <div className="grid gap-4">
+        <FactorHeatmapVisual universeId={universeId} />
+        <FactorRadarChart weights={weights} title="현재 팩터 가중치" />
+      </div>
+
       <FactorStrategyPanel
         viewMode="advanced"
         strategies={MULTI_FACTOR_STRATEGIES}

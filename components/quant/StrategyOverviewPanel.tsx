@@ -1,12 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Card from "@/components/ui/Card";
 import QuantLoadingState from "./QuantLoadingState";
 import {
   statusColor,
   type StrategyOverviewItem,
 } from "@/lib/quant/strategy-overview";
+import { BASIC_STYLE_STRATEGY_IDS } from "@/lib/quant/constants";
 import type { StrategyId } from "@/lib/quant/types";
+
+const STRATEGY_EMOJI: Partial<Record<StrategyId, string>> = {
+  growth: "🚀",
+  value: "💰",
+  dividend: "🏦",
+  "quality-factor": "🛡",
+  momentum: "📈",
+  garp: "🎯",
+  buffett: "🦉",
+  moat: "🏰",
+};
 
 interface StrategyOverviewPanelProps {
   onSelectStrategy: (id: StrategyId) => void;
@@ -16,6 +29,7 @@ export default function StrategyOverviewPanel({
   onSelectStrategy,
 }: StrategyOverviewPanelProps) {
   const [strategies, setStrategies] = useState<StrategyOverviewItem[]>([]);
+  const [pickCounts, setPickCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [entryLoading, setEntryLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +53,10 @@ export default function StrategyOverviewPanel({
         if (cancelled) return;
         if (overviewData.error) throw new Error(overviewData.error);
 
-        setStrategies(overviewData.strategies ?? []);
+        const all = (overviewData.strategies ?? []) as StrategyOverviewItem[];
+        setStrategies(
+          all.filter((s) => BASIC_STYLE_STRATEGY_IDS.includes(s.id))
+        );
         setLoading(false);
 
         const entryRes = await fetch("/api/timing/strategy-environment", {
@@ -73,6 +90,22 @@ export default function StrategyOverviewPanel({
             })
           );
         }
+
+        const counts: Record<string, number> = {};
+        await Promise.all(
+          BASIC_STYLE_STRATEGY_IDS.map(async (id) => {
+            try {
+              const r = await fetch(`/api/quant/strategies/${id}?limit=10`, {
+                signal: controller.signal,
+              });
+              const d = await r.json();
+              counts[id] = d.results?.length ?? 0;
+            } catch {
+              counts[id] = 0;
+            }
+          })
+        );
+        if (!cancelled) setPickCounts(counts);
       } catch (e) {
         if (cancelled) return;
         if (e instanceof Error && e.name === "AbortError") {
@@ -101,9 +134,9 @@ export default function StrategyOverviewPanel({
   return (
     <div className="space-y-3">
       <div>
-        <h3 className="text-sm font-bold text-white">투자 전략</h3>
-        <p className="text-[10px] text-neutral">
-          현재 어떤 스타일이 유리한지 상대 순위로 확인하세요
+        <h3 className="section-title">투자 전략</h3>
+        <p className="section-subtitle">
+          현재 어떤 스타일이 유리한지 확인하세요
         </p>
       </div>
 
@@ -121,11 +154,12 @@ export default function StrategyOverviewPanel({
           </button>
         </div>
       ) : (
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           {strategies.map((s) => (
             <StrategyCard
               key={s.id}
               strategy={s}
+              pickCount={pickCounts[s.id] ?? 0}
               entryLoading={entryLoading || s.entryLabel === "…"}
               onClick={() => onSelectStrategy(s.id)}
             />
@@ -138,52 +172,52 @@ export default function StrategyOverviewPanel({
 
 function StrategyCard({
   strategy,
+  pickCount,
   entryLoading,
   onClick,
 }: {
   strategy: StrategyOverviewItem;
+  pickCount: number;
   entryLoading: boolean;
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="rounded-xl border border-surface-border bg-surface-card p-4 text-left transition-colors hover:border-accent/30 hover:bg-accent/5 card-glow"
-    >
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-accent text-sm">{strategy.icon}</span>
-        <span className="text-sm font-semibold text-white">{strategy.name}</span>
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-3">
-        <div>
-          <p className="text-[10px] text-neutral">전략 적합도</p>
-          <p className="font-mono text-lg font-bold text-accent">
-            {strategy.suitabilityScore}
-            <span className="text-xs font-normal text-neutral">점</span>
-          </p>
-          <p className={`text-[10px] font-medium ${statusColor(strategy.statusLabel)}`}>
-            {strategy.statusLabel}
-          </p>
+    <button type="button" onClick={onClick} className="text-left">
+      <Card interactive padding="md" className="h-full">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">
+            {STRATEGY_EMOJI[strategy.id] ?? strategy.icon}
+          </span>
+          <span className="text-sm font-bold text-text">{strategy.shortName}</span>
         </div>
-        <div>
-          <p className="text-[10px] text-neutral">현재 진입 환경</p>
-          {entryLoading || strategy.entryLabel === "…" ? (
-            <p className="mt-1 text-xs text-neutral animate-pulse">계산 중…</p>
-          ) : (
-            <>
-              <p className="font-mono text-lg font-bold text-white">
-                {strategy.entryScore >= 0 ? strategy.entryScore : "—"}
-                <span className="text-xs font-normal text-neutral">점</span>
-              </p>
-              <p className="text-[10px] text-neutral">{strategy.entryLabel}</p>
-            </>
-          )}
+
+        <div className="mt-4 flex items-end justify-between">
+          <div>
+            <p className="text-[10px] text-muted">전략 적합도</p>
+            <p className="text-2xl font-semibold text-accent">
+              {strategy.suitabilityScore}
+              <span className="text-xs font-normal text-muted">점</span>
+            </p>
+            <p className={`text-xs font-medium ${statusColor(strategy.statusLabel)}`}>
+              {strategy.statusLabel}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] text-muted">추천 종목</p>
+            <p className="text-lg font-semibold text-text">{pickCount}개</p>
+          </div>
         </div>
-      </div>
-      <p className="mt-2 text-xs leading-relaxed text-gray-400 line-clamp-2">
-        {strategy.marketInsight}
-      </p>
+
+        {!entryLoading && strategy.entryLabel !== "…" && (
+          <p className="mt-2 text-[10px] text-muted">
+            진입 환경 {strategy.entryScore}점 · {strategy.entryLabel}
+          </p>
+        )}
+
+        <p className="mt-3 text-xs leading-relaxed text-muted line-clamp-2">
+          {strategy.marketInsight}
+        </p>
+      </Card>
     </button>
   );
 }

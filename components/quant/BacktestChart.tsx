@@ -39,17 +39,17 @@ export default function BacktestChart({
     <div className="h-56">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data}>
-          <CartesianGrid stroke="#30363d" strokeDasharray="3 3" />
+          <CartesianGrid stroke="rgba(148,163,184,0.15)" strokeDasharray="3 3" />
           <XAxis
             dataKey="date"
-            tick={{ fill: "#8b949e", fontSize: 10 }}
+            tick={{ fill: "#94A3B8", fontSize: 10 }}
             axisLine={false}
             tickLine={false}
             interval="preserveStartEnd"
             minTickGap={30}
           />
           <YAxis
-            tick={{ fill: "#8b949e", fontSize: 10 }}
+            tick={{ fill: "#94A3B8", fontSize: 10 }}
             axisLine={false}
             tickLine={false}
             width={48}
@@ -57,9 +57,9 @@ export default function BacktestChart({
           />
           <Tooltip
             contentStyle={{
-              background: "#1c2128",
-              border: "1px solid #30363d",
-              borderRadius: "8px",
+              background: "#1E293B",
+              border: "none",
+              borderRadius: "12px",
               fontSize: "12px",
             }}
             formatter={(value, name) => {
@@ -70,7 +70,7 @@ export default function BacktestChart({
             }}
           />
           <Legend
-            wrapperStyle={{ fontSize: "10px", color: "#8b949e" }}
+            wrapperStyle={{ fontSize: "10px", color: "#94A3B8" }}
             formatter={(value) => {
               if (value === "strategyReturn") return strategyName;
               return LINE_LABELS[value] ?? value;
@@ -79,14 +79,14 @@ export default function BacktestChart({
           <Line
             type="monotone"
             dataKey="strategyReturn"
-            stroke="#f0b429"
+            stroke="#3B82F6"
             strokeWidth={2}
             dot={false}
           />
           <Line
             type="monotone"
             dataKey="benchmarkReturn"
-            stroke="#8b949e"
+            stroke="#94A3B8"
             strokeWidth={1.5}
             dot={false}
             strokeDasharray="4 4"
@@ -94,7 +94,7 @@ export default function BacktestChart({
           <Line
             type="monotone"
             dataKey="nasdaqReturn"
-            stroke="#58a6ff"
+            stroke="#8B5CF6"
             strokeWidth={1.5}
             dot={false}
             strokeDasharray="2 2"

@@ -26,10 +26,11 @@ export default function QuantPanel({ mode, modeHydrated }: QuantPanelProps) {
   const [advancedStrategyId, setAdvancedStrategyId] =
     useState<MultiFactorStrategyId | "custom">("all-factor");
   const [weights, setWeights] = useState<FactorWeights>({
-    value: 25,
-    quality: 25,
-    growth: 25,
-    momentum: 25,
+    value: 20,
+    quality: 20,
+    growth: 20,
+    momentum: 20,
+    stability: 20,
   });
   const [universeId, setUniverseId] = useState<UniverseId>("combined");
   const [selectedTicker, setSelectedTicker] = useState<string | null>(null);

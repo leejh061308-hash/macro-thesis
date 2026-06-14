@@ -140,10 +140,10 @@ export function buildStrategyAiExplanation(
 export function statusColor(status: StrategyStatus): string {
   switch (status) {
     case "강세":
-      return "text-emerald-400";
+      return "text-bullish";
     case "보통":
-      return "text-amber-400";
+      return "text-warning";
     case "약세":
-      return "text-rose-400";
+      return "text-bearish";
   }
 }
