@@ -1,4 +1,4 @@
-import { ALL_FACTOR_IDS, computeFactorBundle } from "./factors";
+import { ALL_FACTOR_IDS, computeAllFactorBundles } from "./factors";
 import { buildAiFactorSummary, computeMultiFactorScore } from "./multi-factor";
 import type {
   FactorId,
@@ -64,9 +64,11 @@ export function buildUniverseRanking(
 ): RankingEntry[] {
   const factorScores = new Map<string, FactorScores>();
   const factorConfidence = new Map<string, RankingEntry["factorConfidence"]>();
+  const allBundles = computeAllFactorBundles(universe);
 
   for (const m of universe) {
-    const bundle = computeFactorBundle(m, universe);
+    const bundle = allBundles.get(m.ticker);
+    if (!bundle) continue;
     factorScores.set(m.ticker, bundle.scores);
     factorConfidence.set(m.ticker, bundle.confidence);
   }
@@ -167,7 +169,8 @@ export function getStockFactorDetail(
 
   if (entry) return { ...entry, metrics };
 
-  const bundle = computeFactorBundle(m, universe);
+  const bundle = computeAllFactorBundles(universe).get(m.ticker);
+  if (!bundle) return null;
   const w = weights ?? {
     quality: 30,
     growth: 25,

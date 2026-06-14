@@ -5,8 +5,17 @@ import {
   setCached,
 } from "./cache";
 import {
+  HOME_API_CACHE_KEY,
+  HOME_API_CACHE_TTL,
+  OVERVIEW_CACHE_KEY,
+  RANKING_CACHE_TTL,
+  SCORING_METRICS_CACHE_KEY,
+  UNIVERSE_CACHE_VERSION,
+} from "./cache-keys";
+import {
   enrichMomentumFromPrices,
   enrichScoringPool,
+  enrichFullScoringPool,
   enrichGrowthFields,
   enrichValueFields,
   fetchUniverseProfiles,
@@ -76,10 +85,9 @@ import type {
 
 const DEFAULT_PORTFOLIO_SIZE = 20;
 
-const UNIVERSE_CACHE_VERSION = "v10";
-export const SCORING_METRICS_CACHE_KEY = `scoring-metrics-${UNIVERSE_CACHE_VERSION}`;
 const SCORING_CACHE_KEY = SCORING_METRICS_CACHE_KEY;
-const OVERVIEW_CACHE_KEY = "strategy-overview-v11";
+
+export { SCORING_METRICS_CACHE_KEY };
 
 let fullUniverseInFlight: Promise<void> | null = null;
 let scoringInFlight: Promise<QuantMetrics[]> | null = null;
@@ -141,9 +149,9 @@ async function enrichFullUniverse(universeId: UniverseId = "combined"): Promise<
   const rest = metrics.filter((m) => !poolSet.has(m.ticker));
 
   if (!cached?.length) {
-    await enrichScoringPool(pool);
+    await enrichFullScoringPool(pool);
   } else if (isUniverseFundamentallySparse(pool)) {
-    await enrichScoringPool(pool);
+    await enrichFullScoringPool(pool);
   }
 
   if (rest.length > 0) {
@@ -206,9 +214,7 @@ export async function getUniverseMetrics(
     if (scoring?.length && !isUniverseFundamentallySparse(scoring)) {
       triggerFullUniverseBackground();
       if (cached?.length) return cached;
-      // scoring pool만 있고 full cache 없으면 background에서 full 채움
-      await enrichFullUniverse(universeId);
-      return getCached<QuantMetrics[]>(cacheKey) ?? scoring;
+      return scoring;
     }
   }
 
@@ -313,15 +319,20 @@ export async function getRanking(
   universeId: UniverseId = "combined",
   limit = 100
 ): Promise<RankingResponse> {
-  const universe = await getUniverseMetrics(universeId);
   const weights = resolveWeights(strategyId, customWeights);
+  const weightsKey = JSON.stringify(weights);
+  const rankingCacheKey = `ranking:v2:${strategyId}:${universeId}:${limit}:${weightsKey}`;
+  const cachedRanking = getCached<RankingResponse>(rankingCacheKey);
+  if (cachedRanking) return cachedRanking;
+
+  const universe = await getUniverseMetrics(universeId);
 
   const entries =
     strategyId === "custom" && customWeights
       ? rankByMultiFactor(universe, weights, limit)
       : buildUniverseRanking(universe, weights, limit);
 
-  return {
+  const response: RankingResponse = {
     universe: universeId,
     universeSize: universe.length,
     strategyId,
@@ -329,6 +340,12 @@ export async function getRanking(
     entries,
     updatedAt: new Date().toISOString(),
   };
+
+  if (entries.length > 0) {
+    setCached(rankingCacheKey, response, RANKING_CACHE_TTL);
+  }
+
+  return response;
 }
 
 export async function getFactorDetail(

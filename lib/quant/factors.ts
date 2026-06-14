@@ -92,13 +92,19 @@ function weightedFactorScore(
   }));
   const valid = parts.filter((p) => p.valid);
 
+  return metaFromWeightedParts(valid, applicable.length);
+}
+
+function emptyMeta(): FactorScoreMeta {
+  return { score: 0, available: 0, total: 0, confidence: "low" };
+}
+
+function metaFromWeightedParts(
+  valid: Array<{ score: number; weight: number }>,
+  totalFields: number
+): FactorScoreMeta {
   if (valid.length === 0) {
-    return {
-      score: 0,
-      available: 0,
-      total: applicable.length,
-      confidence: "low",
-    };
+    return emptyMeta();
   }
 
   const totalWeight = valid.reduce((s, p) => s + p.weight, 0);
@@ -107,9 +113,59 @@ function weightedFactorScore(
   return {
     score: Math.round(sum / totalWeight),
     available: valid.length,
-    total: applicable.length,
-    confidence: confidenceFromCounts(valid.length, applicable.length),
+    total: totalFields,
+    confidence: confidenceFromCounts(valid.length, totalFields),
   };
+}
+
+function buildFieldLookup(
+  universe: QuantMetrics[],
+  field: FactorField
+): Map<string, number> {
+  const lookup = new Map<string, number>();
+  const eligible = universe.filter(
+    (m) => fieldApplies(field, getSectorClass(m.ticker)) && field.valid(m)
+  );
+  const values = collect(eligible.map((m) => field.getter(m)));
+  if (values.length === 0) return lookup;
+
+  for (const m of eligible) {
+    const mine = field.getter(m);
+    if (mine == null) continue;
+    lookup.set(m.ticker, percentileRank(values, mine, field.lowerIsBetter));
+  }
+  return lookup;
+}
+
+function weightedFactorScoreBatch(
+  universe: QuantMetrics[],
+  fields: FactorField[]
+): Map<string, FactorScoreMeta> {
+  const lookups = fields.map((field) => buildFieldLookup(universe, field));
+  const result = new Map<string, FactorScoreMeta>();
+
+  for (const metrics of universe) {
+    const sector = getSectorClass(metrics.ticker);
+    const applicable = fields.filter((f) => fieldApplies(f, sector));
+    const parts = fields.flatMap((field, fieldIndex) => {
+      if (!fieldApplies(field, sector)) return [];
+      return [{
+        score: lookups[fieldIndex].get(metrics.ticker) ?? 0,
+        weight: field.weight,
+        valid:
+          field.valid(metrics) && lookups[fieldIndex].has(metrics.ticker),
+      }];
+    });
+    result.set(
+      metrics.ticker,
+      metaFromWeightedParts(
+        parts.filter((p) => p.valid),
+        applicable.length
+      )
+    );
+  }
+
+  return result;
 }
 
 const VALUE_FIELDS: FactorField[] = [
@@ -447,41 +503,60 @@ export function computeFactorBundle(
   metrics: QuantMetrics,
   universe: QuantMetrics[]
 ): FactorScoreBundle {
-  const valueMeta = weightedFactorScore(universe, metrics, VALUE_FIELDS);
-  const qualityMeta = weightedFactorScore(universe, metrics, QUALITY_FIELDS);
-  const growthMeta = weightedFactorScore(universe, metrics, GROWTH_FIELDS);
-  const momentumMeta = weightedFactorScore(universe, metrics, MOMENTUM_FIELDS);
-  const stabilityMeta = weightedFactorScore(universe, metrics, STABILITY_FIELDS);
-  const dividendMeta = applyDividendPayoutPenalty(
-    weightedFactorScore(universe, metrics, DIVIDEND_FIELDS),
-    metrics
-  );
+  return computeAllFactorBundles(universe).get(metrics.ticker)!;
+}
 
-  const meta: Record<FactorId, FactorScoreMeta> = {
-    value: valueMeta,
-    quality: qualityMeta,
-    growth: growthMeta,
-    momentum: momentumMeta,
-    stability: stabilityMeta,
-    dividend: dividendMeta,
-  };
+export function computeAllFactorBundles(
+  universe: QuantMetrics[]
+): Map<string, FactorScoreBundle> {
+  const valueMap = weightedFactorScoreBatch(universe, VALUE_FIELDS);
+  const qualityMap = weightedFactorScoreBatch(universe, QUALITY_FIELDS);
+  const growthMap = weightedFactorScoreBatch(universe, GROWTH_FIELDS);
+  const momentumMap = weightedFactorScoreBatch(universe, MOMENTUM_FIELDS);
+  const stabilityMap = weightedFactorScoreBatch(universe, STABILITY_FIELDS);
+  const dividendBaseMap = weightedFactorScoreBatch(universe, DIVIDEND_FIELDS);
 
-  const confidence = Object.fromEntries(
-    (Object.keys(meta) as FactorId[]).map((id) => [id, meta[id].confidence])
-  ) as Record<FactorId, DataConfidence>;
+  const bundles = new Map<string, FactorScoreBundle>();
 
-  return {
-    scores: {
-      value: valueMeta.score,
-      quality: qualityMeta.score,
-      growth: growthMeta.score,
-      momentum: momentumMeta.score,
-      stability: stabilityMeta.score,
-      dividend: dividendMeta.score,
-    },
-    confidence,
-    meta,
-  };
+  for (const metrics of universe) {
+    const dividendMeta = applyDividendPayoutPenalty(
+      dividendBaseMap.get(metrics.ticker) ?? {
+        score: 0,
+        available: 0,
+        total: 0,
+        confidence: "low" as DataConfidence,
+      },
+      metrics
+    );
+
+    const meta: Record<FactorId, FactorScoreMeta> = {
+      value: valueMap.get(metrics.ticker) ?? emptyMeta(),
+      quality: qualityMap.get(metrics.ticker) ?? emptyMeta(),
+      growth: growthMap.get(metrics.ticker) ?? emptyMeta(),
+      momentum: momentumMap.get(metrics.ticker) ?? emptyMeta(),
+      stability: stabilityMap.get(metrics.ticker) ?? emptyMeta(),
+      dividend: dividendMeta,
+    };
+
+    const confidence = Object.fromEntries(
+      (Object.keys(meta) as FactorId[]).map((id) => [id, meta[id].confidence])
+    ) as Record<FactorId, DataConfidence>;
+
+    bundles.set(metrics.ticker, {
+      scores: {
+        value: meta.value.score,
+        quality: meta.quality.score,
+        growth: meta.growth.score,
+        momentum: meta.momentum.score,
+        stability: meta.stability.score,
+        dividend: meta.dividend.score,
+      },
+      confidence,
+      meta,
+    });
+  }
+
+  return bundles;
 }
 
 export function computeFactorScore(

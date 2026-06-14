@@ -236,21 +236,34 @@ async function mapConcurrent<T, R>(
 /** Finnhub에 모멘텀 데이터가 없을 때 Yahoo 월간 시세로 보완 */
 export async function enrichMomentumFromPrices(
   metrics: QuantMetrics[],
-  options?: { range?: "3y" | "5y" | "10y"; concurrency?: number }
+  options?: {
+    range?: "3y" | "5y" | "10y";
+    concurrency?: number;
+    /** 홈·전략용 — 3/6/12M 수익률만 (MA·52주 필드 생략) */
+    essentialOnly?: boolean;
+  }
 ): Promise<void> {
   const range = options?.range ?? "3y";
   const concurrency = options?.concurrency ?? 8;
+  const essentialOnly = options?.essentialOnly ?? false;
   const spyPrices = await fetchMonthlyPrices("SPY", range);
   const spyReturn12m = computeTrailingReturn(spyPrices, 12);
 
-  const needsEnrich = metrics.filter(
-    (m) =>
+  const needsEnrich = metrics.filter((m) => {
+    if (
       m.return12m == null ||
-      m.relativeStrength == null ||
+      m.return3m == null ||
+      m.relativeStrength == null
+    ) {
+      return true;
+    }
+    if (essentialOnly) return false;
+    return (
       m.return1m == null ||
       m.position52w == null ||
       m.maAbove20 == null
-  );
+    );
+  });
   if (needsEnrich.length === 0) return;
 
   let index = 0;
@@ -263,13 +276,17 @@ export async function enrichMomentumFromPrices(
 
       const end = prices[prices.length - 1].close;
 
-      if (m.return1m == null) m.return1m = computeTrailingReturn(prices, 1);
+      if (!essentialOnly) {
+        if (m.return1m == null) m.return1m = computeTrailingReturn(prices, 1);
+      }
       if (m.return3m == null) m.return3m = computeTrailingReturn(prices, 3);
       if (m.return6m == null) m.return6m = computeTrailingReturn(prices, 6);
       if (m.return12m == null) m.return12m = computeTrailingReturn(prices, 12);
       if (m.relativeStrength == null && m.return12m != null && spyReturn12m != null) {
         m.relativeStrength = m.return12m - spyReturn12m;
       }
+
+      if (essentialOnly) continue;
 
       const recent = prices.slice(-13);
       if (recent.length > 0 && m.position52w == null) {
@@ -342,11 +359,25 @@ export function deriveComputedMetrics(metrics: QuantMetrics[]): void {
   }
 }
 
+/** 홈·전략 카드용 — 필수 필드만 빠르게 보강 */
 export async function enrichScoringPool(metrics: QuantMetrics[]): Promise<void> {
   await enrichFundamentalsFromYahoo(metrics, { concurrency: 6 });
   await enrichGrowthFields(metrics);
   await enrichValueFields(metrics);
-  await enrichMomentumFromPrices(metrics, { range: "3y", concurrency: 6 });
+  await enrichMomentumFromPrices(metrics, {
+    range: "3y",
+    concurrency: 6,
+    essentialOnly: true,
+  });
+  deriveComputedMetrics(metrics);
+}
+
+/** 퀀트 랭킹용 — MA·52주 등 확장 모멘텀 포함 */
+export async function enrichFullScoringPool(metrics: QuantMetrics[]): Promise<void> {
+  await enrichFundamentalsFromYahoo(metrics, { concurrency: 8 });
+  await enrichGrowthFields(metrics);
+  await enrichValueFields(metrics);
+  await enrichMomentumFromPrices(metrics, { range: "3y", concurrency: 8 });
   deriveComputedMetrics(metrics);
 }
 

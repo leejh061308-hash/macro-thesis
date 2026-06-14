@@ -1,10 +1,9 @@
 import { getCached } from "./cache";
+import { OVERVIEW_CACHE_KEY } from "./cache-keys";
 import { getScoringUniverseMetrics, getStrategyOverviews } from "./service";
 import { getStrategyEntryEnvironments } from "@/lib/timing/service";
 
 export type QuantCacheStatus = "ready" | "warming" | "cold";
-
-const OVERVIEW_CACHE_KEY = "strategy-overview-v9";
 
 let warmInFlight: Promise<void> | null = null;
 
