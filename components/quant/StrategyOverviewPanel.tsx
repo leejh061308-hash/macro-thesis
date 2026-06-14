@@ -29,7 +29,6 @@ export default function StrategyOverviewPanel({
   onSelectStrategy,
 }: StrategyOverviewPanelProps) {
   const [strategies, setStrategies] = useState<StrategyOverviewItem[]>([]);
-  const [pickCounts, setPickCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [entryLoading, setEntryLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -90,22 +89,6 @@ export default function StrategyOverviewPanel({
             })
           );
         }
-
-        const counts: Record<string, number> = {};
-        await Promise.all(
-          BASIC_STYLE_STRATEGY_IDS.map(async (id) => {
-            try {
-              const r = await fetch(`/api/quant/strategies/${id}?limit=10`, {
-                signal: controller.signal,
-              });
-              const d = await r.json();
-              counts[id] = d.results?.length ?? 0;
-            } catch {
-              counts[id] = 0;
-            }
-          })
-        );
-        if (!cancelled) setPickCounts(counts);
       } catch (e) {
         if (cancelled) return;
         if (e instanceof Error && e.name === "AbortError") {
@@ -159,7 +142,6 @@ export default function StrategyOverviewPanel({
             <StrategyCard
               key={s.id}
               strategy={s}
-              pickCount={pickCounts[s.id] ?? 0}
               entryLoading={entryLoading || s.entryLabel === "…"}
               onClick={() => onSelectStrategy(s.id)}
             />
@@ -172,12 +154,10 @@ export default function StrategyOverviewPanel({
 
 function StrategyCard({
   strategy,
-  pickCount,
   entryLoading,
   onClick,
 }: {
   strategy: StrategyOverviewItem;
-  pickCount: number;
   entryLoading: boolean;
   onClick: () => void;
 }) {
@@ -191,7 +171,7 @@ function StrategyCard({
           <span className="text-sm font-bold text-text">{strategy.shortName}</span>
         </div>
 
-        <div className="mt-4 flex items-end justify-between">
+        <div className="mt-4 grid grid-cols-2 gap-3">
           <div>
             <p className="text-[10px] text-muted">전략 적합도</p>
             <p className="text-2xl font-semibold text-accent">
@@ -202,17 +182,21 @@ function StrategyCard({
               {strategy.statusLabel}
             </p>
           </div>
-          <div className="text-right">
-            <p className="text-[10px] text-muted">추천 종목</p>
-            <p className="text-lg font-semibold text-text">{pickCount}개</p>
+          <div>
+            <p className="text-[10px] text-muted">진입 환경</p>
+            {entryLoading || strategy.entryLabel === "…" ? (
+              <p className="mt-1 text-xs text-muted animate-pulse">계산 중…</p>
+            ) : (
+              <>
+                <p className="text-2xl font-semibold text-text">
+                  {strategy.entryScore >= 0 ? strategy.entryScore : "—"}
+                  <span className="text-xs font-normal text-muted">점</span>
+                </p>
+                <p className="text-[10px] text-muted">{strategy.entryLabel}</p>
+              </>
+            )}
           </div>
         </div>
-
-        {!entryLoading && strategy.entryLabel !== "…" && (
-          <p className="mt-2 text-[10px] text-muted">
-            진입 환경 {strategy.entryScore}점 · {strategy.entryLabel}
-          </p>
-        )}
 
         <p className="mt-3 text-xs leading-relaxed text-muted line-clamp-2">
           {strategy.marketInsight}

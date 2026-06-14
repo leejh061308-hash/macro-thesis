@@ -43,26 +43,46 @@ export default function StrategyDetailPanel({
     setAiExplanation(null);
     setSelectedTicker(null);
 
-    Promise.all([
-      fetch("/api/quant/strategies/overview", { cache: "no-store" }).then((r) =>
-        r.json()
-      ),
-      fetch(`/api/quant/strategies/${strategyId}?limit=10`, {
-        cache: "no-store",
-      }).then((r) => r.json()),
-    ])
-      .then(([overviewData, resultsData]) => {
-        const item = (overviewData.strategies as StrategyOverviewItem[] | undefined)?.find(
-          (s) => s.id === strategyId
-        );
+    const controller = new AbortController();
+
+    async function load() {
+      try {
+        const [overviewData, quickData] = await Promise.all([
+          fetch("/api/quant/strategies/overview?quick=1", {
+            cache: "no-store",
+            signal: controller.signal,
+          }).then((r) => r.json()),
+          fetch(`/api/quant/strategies/${strategyId}?limit=10&quick=1`, {
+            cache: "no-store",
+            signal: controller.signal,
+          }).then((r) => r.json()),
+        ]);
+
+        const item = (
+          overviewData.strategies as StrategyOverviewItem[] | undefined
+        )?.find((s) => s.id === strategyId);
         if (item) setOverview(item);
-        if (resultsData.error) throw new Error(resultsData.error);
-        setResults(resultsData.results ?? []);
-      })
-      .catch((e) => {
+        if (quickData.error) throw new Error(quickData.error);
+        setResults(quickData.results ?? []);
+        setLoading(false);
+
+        const fullRes = await fetch(
+          `/api/quant/strategies/${strategyId}?limit=10`,
+          { cache: "no-store", signal: controller.signal }
+        );
+        const fullData = await fullRes.json();
+        if (fullData.results?.length) {
+          setResults(fullData.results);
+        }
+      } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") return;
         setError(e instanceof Error ? e.message : "로드 실패");
-      })
-      .finally(() => setLoading(false));
+        setLoading(false);
+      }
+    }
+
+    void load();
+    return () => controller.abort();
   }, [strategyId]);
 
   useEffect(() => {

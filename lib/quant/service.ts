@@ -79,7 +79,7 @@ const DEFAULT_PORTFOLIO_SIZE = 20;
 const UNIVERSE_CACHE_VERSION = "v9";
 export const SCORING_METRICS_CACHE_KEY = `scoring-metrics-${UNIVERSE_CACHE_VERSION}`;
 const SCORING_CACHE_KEY = SCORING_METRICS_CACHE_KEY;
-const OVERVIEW_CACHE_KEY = "strategy-overview-v9";
+const OVERVIEW_CACHE_KEY = "strategy-overview-v10";
 
 let fullUniverseInFlight: Promise<void> | null = null;
 let scoringInFlight: Promise<QuantMetrics[]> | null = null;
@@ -345,7 +345,31 @@ export async function getStrategyResults(
   limit = 20
 ): Promise<StrategyResult[]> {
   const universe = await getScoringUniverseMetrics();
-  return rankByStrategy(strategyId, universe, limit);
+  let results = rankByStrategy(strategyId, universe, limit);
+
+  const growthLike: StrategyId[] = [
+    "growth",
+    "garp",
+    "rate-cut",
+    "ai-beneficiary",
+    "datacenter",
+    "power-infra",
+  ];
+  const valueLike: StrategyId[] = ["value", "dividend", "buffett", "rate-hike"];
+
+  if (results.length === 0 && growthLike.includes(strategyId)) {
+    await enrichGrowthFields(universe);
+    persistScoringCache(universe);
+    results = rankByStrategy(strategyId, universe, limit);
+  }
+
+  if (results.length === 0 && valueLike.includes(strategyId)) {
+    await enrichValueFields(universe);
+    persistScoringCache(universe);
+    results = rankByStrategy(strategyId, universe, limit);
+  }
+
+  return results;
 }
 
 export async function runFactorBacktest(

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getStrategyResultsWithTiming } from "@/lib/quant/service";
+import { getStrategyResults, getStrategyResultsWithTiming } from "@/lib/quant/service";
 import { isValidStrategyId } from "@/lib/quant/constants";
 
 export async function GET(
@@ -12,7 +12,10 @@ export async function GET(
   }
 
   const limit = Number(request.nextUrl.searchParams.get("limit") ?? "20");
-  const results = await getStrategyResultsWithTiming(id, limit);
+  const quick = request.nextUrl.searchParams.get("quick") === "1";
+  const results = quick
+    ? await getStrategyResults(id, limit)
+    : await getStrategyResultsWithTiming(id, limit);
 
   return NextResponse.json({ strategyId: id, results });
 }

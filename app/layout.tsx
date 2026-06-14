@@ -22,7 +22,9 @@ export default function RootLayout({
     <html lang="ko" className="dark">
       <body className="min-h-screen font-sans">
         <AppHeader />
-        <main className="mx-auto max-w-lg px-4 pb-24 pt-4">{children}</main>
+        <main className="mx-auto max-w-lg overflow-x-hidden px-4 pb-24 pt-4">
+          {children}
+        </main>
         <BottomNav />
       </body>
     </html>
