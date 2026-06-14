@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCached, setCached } from "@/lib/quant/cache";
+import { getCached, setCached, STALE_GRACE_TTL, getStaleCached } from "@/lib/quant/cache";
 import { HOME_API_CACHE_KEY, HOME_API_CACHE_TTL } from "@/lib/quant/cache-keys";
 import { BASIC_STYLE_STRATEGY_IDS } from "@/lib/quant/constants";
 import {
@@ -12,24 +12,31 @@ import {
 } from "@/lib/quant/warmup";
 import type { StrategyId } from "@/lib/quant/types";
 
+type HomePayload = Awaited<ReturnType<typeof buildHomePayload>>;
+
+let homeRefreshInFlight: Promise<HomePayload> | null = null;
+
 export async function GET() {
   try {
-    const cached = getCached<Awaited<ReturnType<typeof buildHomePayload>>>(
-      HOME_API_CACHE_KEY
+    const fresh = getCached<HomePayload>(HOME_API_CACHE_KEY);
+    if (fresh) {
+      return NextResponse.json(fresh);
+    }
+
+    const stale = getStaleCached<HomePayload>(
+      HOME_API_CACHE_KEY,
+      STALE_GRACE_TTL
     );
-    if (cached) {
-      return NextResponse.json(cached);
+    if (stale) {
+      void refreshHomeCache();
+      return NextResponse.json(stale);
     }
 
     if (getQuantCacheStatus() !== "ready") {
       void ensureQuantCacheWarm();
     }
 
-    const payload = await buildHomePayload();
-    if (payload.strategies.length > 0) {
-      setCached(HOME_API_CACHE_KEY, payload, HOME_API_CACHE_TTL);
-    }
-
+    const payload = await refreshHomeCache();
     return NextResponse.json(payload);
   } catch (error) {
     console.error("[home]", error);
@@ -38,6 +45,23 @@ export async function GET() {
       { status: 500 }
     );
   }
+}
+
+async function refreshHomeCache(): Promise<HomePayload> {
+  if (homeRefreshInFlight) return homeRefreshInFlight;
+
+  homeRefreshInFlight = buildHomePayload()
+    .then((payload) => {
+      if (payload.strategies.length > 0) {
+        setCached(HOME_API_CACHE_KEY, payload, HOME_API_CACHE_TTL);
+      }
+      return payload;
+    })
+    .finally(() => {
+      homeRefreshInFlight = null;
+    });
+
+  return homeRefreshInFlight;
 }
 
 async function buildHomePayload() {

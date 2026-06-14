@@ -124,15 +124,15 @@ export async function getTimingHistory(
 export async function getTodaysOpportunities(
   limit = 10
 ): Promise<TimingOpportunity[]> {
-  const cacheKey = "timing:opportunities:v2";
+  const cacheKey = "timing:opportunities:v3";
   const cached = getCached<TimingOpportunity[]>(cacheKey);
   if (cached) return cached;
 
   const universe = await getUniverseForScoring();
   const watchlist = await listWatchlistSafe().catch(() => []);
   const watchTickers = watchlist.map((w) => w.ticker);
-  const universeTickers = universe.slice(0, 24).map((m) => m.ticker);
-  const tickers = [...new Set([...watchTickers, ...universeTickers])].slice(0, 28);
+  const universeTickers = universe.slice(0, 16).map((m) => m.ticker);
+  const tickers = [...new Set([...watchTickers, ...universeTickers])].slice(0, 20);
 
   const opportunities: TimingOpportunity[] = [];
   const BATCH = 7;

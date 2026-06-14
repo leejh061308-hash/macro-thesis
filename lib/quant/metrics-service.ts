@@ -239,34 +239,38 @@ export async function enrichMomentumFromPrices(
   options?: {
     range?: "3y" | "5y" | "10y";
     concurrency?: number;
-    /** 홈·전략용 — 3/6/12M 수익률만 (MA·52주 필드 생략) */
+    /** 홈·전략용 — 3/6/12M 수익률만 (MA·52주·안정성 생략) */
     essentialOnly?: boolean;
+    /** 시세 기반 변동성·MDD만 보강 (백그라운드용) */
+    stabilityOnly?: boolean;
   }
 ): Promise<void> {
   const range = options?.range ?? "3y";
   const concurrency = options?.concurrency ?? 8;
   const essentialOnly = options?.essentialOnly ?? false;
+  const stabilityOnly = options?.stabilityOnly ?? false;
   const spyPrices = await fetchMonthlyPrices("SPY", range);
   const spyReturn12m = computeTrailingReturn(spyPrices, 12);
 
   const needsEnrich = metrics.filter((m) => {
+    if (stabilityOnly) {
+      return m.volatility == null || m.maxDrawdown == null;
+    }
+
     const needsMomentum =
       m.return12m == null ||
       m.return3m == null ||
       m.relativeStrength == null;
-    const needsStability = m.volatility == null || m.maxDrawdown == null;
 
-    if (essentialOnly) {
-      return needsMomentum || needsStability;
-    }
+    if (essentialOnly) return needsMomentum;
 
-    return (
-      needsMomentum ||
-      needsStability ||
+    const needsExtended =
       m.return1m == null ||
       m.position52w == null ||
-      m.maAbove20 == null
-    );
+      m.maAbove20 == null;
+    const needsStability = m.volatility == null || m.maxDrawdown == null;
+
+    return needsMomentum || needsExtended || needsStability;
   });
   if (needsEnrich.length === 0) return;
 
@@ -280,6 +284,11 @@ export async function enrichMomentumFromPrices(
 
       const end = prices[prices.length - 1].close;
 
+      if (stabilityOnly) {
+        applyStabilityFromPrices(m, prices);
+        continue;
+      }
+
       if (!essentialOnly) {
         if (m.return1m == null) m.return1m = computeTrailingReturn(prices, 1);
       }
@@ -290,33 +299,33 @@ export async function enrichMomentumFromPrices(
         m.relativeStrength = m.return12m - spyReturn12m;
       }
 
-      applyStabilityFromPrices(m, prices);
+      if (!essentialOnly) {
+        applyStabilityFromPrices(m, prices);
 
-      if (essentialOnly) continue;
+        const recent = prices.slice(-13);
+        if (recent.length > 0 && m.position52w == null) {
+          const maxClose = Math.max(...recent.map((p) => p.close));
+          if (maxClose > 0) m.position52w = end / maxClose;
+        }
 
-      const recent = prices.slice(-13);
-      if (recent.length > 0 && m.position52w == null) {
-        const maxClose = Math.max(...recent.map((p) => p.close));
-        if (maxClose > 0) m.position52w = end / maxClose;
-      }
+        const avg = (n: number) => {
+          const slice = prices.slice(-Math.min(n, prices.length));
+          if (slice.length === 0) return null;
+          return slice.reduce((s, p) => s + p.close, 0) / slice.length;
+        };
 
-      const avg = (n: number) => {
-        const slice = prices.slice(-Math.min(n, prices.length));
-        if (slice.length === 0) return null;
-        return slice.reduce((s, p) => s + p.close, 0) / slice.length;
-      };
-
-      if (m.maAbove20 == null) {
-        const a = avg(1);
-        if (a != null) m.maAbove20 = end > a ? 1 : 0;
-      }
-      if (m.maAbove60 == null) {
-        const a = avg(3);
-        if (a != null) m.maAbove60 = end > a ? 1 : 0;
-      }
-      if (m.maAbove200 == null) {
-        const a = avg(12);
-        if (a != null) m.maAbove200 = end > a ? 1 : 0;
+        if (m.maAbove20 == null) {
+          const a = avg(1);
+          if (a != null) m.maAbove20 = end > a ? 1 : 0;
+        }
+        if (m.maAbove60 == null) {
+          const a = avg(3);
+          if (a != null) m.maAbove60 = end > a ? 1 : 0;
+        }
+        if (m.maAbove200 == null) {
+          const a = avg(12);
+          if (a != null) m.maAbove200 = end > a ? 1 : 0;
+        }
       }
     }
   }
@@ -422,9 +431,62 @@ export function deriveComputedMetrics(metrics: QuantMetrics[]): void {
   }
 }
 
+/** Finnhub metric API — beta·변동성·모멘텀 일괄 (Yahoo 시세보다 빠름) */
+export async function enrichFinnhubCoreMetrics(
+  metrics: QuantMetrics[]
+): Promise<void> {
+  if (!getToken()) return;
+
+  const needs = metrics.filter(
+    (m) =>
+      m.beta == null ||
+      m.volatility == null ||
+      m.maxDrawdown == null ||
+      m.return3m == null ||
+      m.return12m == null ||
+      m.relativeStrength == null
+  );
+  if (needs.length === 0) return;
+
+  await mapConcurrent(needs, 12, async (m) => {
+    const full = await fetchOne(m.ticker);
+    if (!full) return;
+    if (m.beta == null) m.beta = full.beta;
+    if (m.volatility == null) m.volatility = full.volatility;
+    if (m.maxDrawdown == null) m.maxDrawdown = full.maxDrawdown;
+    if (m.return3m == null) m.return3m = full.return3m;
+    if (m.return6m == null) m.return6m = full.return6m;
+    if (m.return12m == null) m.return12m = full.return12m;
+    if (m.relativeStrength == null) m.relativeStrength = full.relativeStrength;
+    if (m.peRatio == null || m.peRatio <= 0) m.peRatio = full.peRatio;
+    if (m.pbRatio == null || m.pbRatio <= 0) m.pbRatio = full.pbRatio;
+    if (m.roe == null) m.roe = full.roe;
+    if (m.revenueGrowth == null) m.revenueGrowth = full.revenueGrowth;
+    if (m.epsGrowth == null) m.epsGrowth = full.epsGrowth;
+  });
+}
+
+/** 시세 기반 변동성·MDD — 백그라운드용 */
+export async function enrichStabilityFromPrices(
+  metrics: QuantMetrics[]
+): Promise<void> {
+  const needs = metrics.filter(
+    (m) => m.volatility == null || m.maxDrawdown == null
+  );
+  if (needs.length === 0) return;
+  await enrichMomentumFromPrices(needs, {
+    range: "3y",
+    concurrency: 6,
+    stabilityOnly: true,
+  });
+}
+
 /** 홈·전략 카드용 — 필수 필드만 빠르게 보강 */
 export async function enrichScoringPool(metrics: QuantMetrics[]): Promise<void> {
-  await enrichFundamentalsFromYahoo(metrics, { concurrency: 6 });
+  await Promise.all([
+    enrichFundamentalsFromYahoo(metrics, { concurrency: 8 }),
+    enrichFinnhubCoreMetrics(metrics),
+  ]);
   await enrichGrowthFields(metrics);
   await enrichValueFields(metrics);
   await enrichMomentumFromPrices(metrics, {
@@ -437,7 +499,10 @@ export async function enrichScoringPool(metrics: QuantMetrics[]): Promise<void> 
 
 /** 퀀트 랭킹용 — MA·52주 등 확장 모멘텀 포함 */
 export async function enrichFullScoringPool(metrics: QuantMetrics[]): Promise<void> {
-  await enrichFundamentalsFromYahoo(metrics, { concurrency: 8 });
+  await Promise.all([
+    enrichFundamentalsFromYahoo(metrics, { concurrency: 8 }),
+    enrichFinnhubCoreMetrics(metrics),
+  ]);
   await enrichGrowthFields(metrics);
   await enrichValueFields(metrics);
   await enrichMomentumFromPrices(metrics, { range: "3y", concurrency: 8 });

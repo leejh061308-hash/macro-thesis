@@ -44,24 +44,22 @@ export default function StrategyOverviewPanel({
 
     async function load() {
       try {
-        const overviewRes = await fetch(
-          "/api/quant/strategies/overview?quick=1",
-          { cache: "no-store", signal: controller.signal }
-        );
+        const [overviewRes, entryRes] = await Promise.all([
+          fetch("/api/quant/strategies/overview?quick=1", {
+            cache: "no-store",
+            signal: controller.signal,
+          }),
+          fetch("/api/timing/strategy-environment", {
+            cache: "no-store",
+            signal: controller.signal,
+          }),
+        ]);
+
         const overviewData = await overviewRes.json();
         if (cancelled) return;
         if (overviewData.error) throw new Error(overviewData.error);
 
         const all = (overviewData.strategies ?? []) as StrategyOverviewItem[];
-        setStrategies(
-          all.filter((s) => BASIC_STYLE_STRATEGY_IDS.includes(s.id))
-        );
-        setLoading(false);
-
-        const entryRes = await fetch("/api/timing/strategy-environment", {
-          cache: "no-store",
-          signal: controller.signal,
-        });
         const entryData = await entryRes.json();
         if (cancelled) return;
 
@@ -74,9 +72,11 @@ export default function StrategyOverviewPanel({
             new Set(environments.map((e: { entryScore: number }) => e.entryScore))
               .size <= 1);
 
-        if (!entryLooksStale) {
-          setStrategies((prev) =>
-            prev.map((s) => {
+        setStrategies(
+          all
+            .filter((s) => BASIC_STYLE_STRATEGY_IDS.includes(s.id))
+            .map((s) => {
+              if (entryLooksStale) return s;
               const env = environments.find(
                 (e: { strategyId: string }) => e.strategyId === s.id
               );
@@ -87,8 +87,9 @@ export default function StrategyOverviewPanel({
                 entryLabel: env.entryLabel,
               };
             })
-          );
-        }
+        );
+        setLoading(false);
+        setEntryLoading(false);
       } catch (e) {
         if (cancelled) return;
         if (e instanceof Error && e.name === "AbortError") {

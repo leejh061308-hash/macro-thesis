@@ -152,8 +152,8 @@ export function getStockFactorDetail(
   const m = universe.find((x) => x.ticker === ticker);
   if (!m) return null;
 
-  const all = buildUniverseRanking(universe, weights, universe.length);
-  const entry = all.find((e) => e.ticker === ticker);
+  const entries = buildUniverseRanking(universe, weights, universe.length);
+  const entry = entries.find((e) => e.ticker === ticker);
 
   const metrics: StockMetricsSummary = {
     peRatio: m.peRatio,
@@ -167,32 +167,6 @@ export function getStockFactorDetail(
     beta: m.beta,
   };
 
-  if (entry) return { ...entry, metrics };
-
-  const bundle = computeAllFactorBundles(universe).get(m.ticker);
-  if (!bundle) return null;
-  const w = weights ?? {
-    quality: 30,
-    growth: 25,
-    momentum: 20,
-    value: 15,
-    stability: 10,
-  };
-  const overallScore = computeMultiFactorScore(m, universe, w);
-
-  return {
-    ticker: m.ticker,
-    name: m.name,
-    factors: bundle.scores,
-    factorRanks: emptyFactorRanks(),
-    factorConfidence: bundle.confidence,
-    overallScore,
-    overallRank: 0,
-    aiSummary: buildAiFactorSummary(bundle.scores, overallScore, {
-      metrics: m,
-      confidence: bundle.confidence,
-      weights: w,
-    }),
-    metrics,
-  };
+  if (!entry) return null;
+  return { ...entry, metrics };
 }

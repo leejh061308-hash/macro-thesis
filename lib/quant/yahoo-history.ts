@@ -6,7 +6,10 @@ const YAHOO_HOSTS = [
   "https://query2.finance.yahoo.com",
 ] as const;
 
-const TIMEOUT = 15_000;
+export interface PricePoint {
+  timestamp: number;
+  close: number;
+}
 
 interface YahooChartResponse {
   chart?: {
@@ -17,12 +20,35 @@ interface YahooChartResponse {
   };
 }
 
-export interface PricePoint {
-  timestamp: number;
-  close: number;
+const TIMEOUT = 15_000;
+const PRICE_CACHE_TTL = 60 * 60 * 1000;
+const priceCache = new Map<
+  string,
+  { points: PricePoint[]; expiresAt: number }
+>();
+
+function priceCacheKey(ticker: string, range: string): string {
+  return `${ticker}:${range}`;
 }
 
 export async function fetchMonthlyPrices(
+  ticker: string,
+  range: "3y" | "5y" | "10y" | "max" = "10y"
+): Promise<PricePoint[]> {
+  const key = priceCacheKey(ticker, range);
+  const cached = priceCache.get(key);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.points;
+  }
+
+  const points = await fetchMonthlyPricesUncached(ticker, range);
+  if (points.length > 0) {
+    priceCache.set(key, { points, expiresAt: Date.now() + PRICE_CACHE_TTL });
+  }
+  return points;
+}
+
+async function fetchMonthlyPricesUncached(
   ticker: string,
   range: "3y" | "5y" | "10y" | "max" = "10y"
 ): Promise<PricePoint[]> {

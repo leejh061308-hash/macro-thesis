@@ -17,6 +17,7 @@ import {
   enrichScoringPool,
   enrichFullScoringPool,
   enrichGrowthFields,
+  enrichStabilityFromPrices,
   enrichValueFields,
   fetchUniverseProfiles,
 } from "./metrics-service";
@@ -92,6 +93,22 @@ export { SCORING_METRICS_CACHE_KEY };
 let fullUniverseInFlight: Promise<void> | null = null;
 let scoringInFlight: Promise<QuantMetrics[]> | null = null;
 let scoringEnrichInFlight: Promise<void> | null = null;
+let stabilityEnrichInFlight: Promise<void> | null = null;
+
+function triggerStabilityBackground(metrics: QuantMetrics[]): void {
+  const needs = metrics.some(
+    (m) => m.volatility == null || m.maxDrawdown == null
+  );
+  if (!needs || stabilityEnrichInFlight) return;
+
+  stabilityEnrichInFlight = enrichStabilityFromPrices(metrics)
+    .then(() => {
+      persistScoringCache(metrics);
+    })
+    .finally(() => {
+      stabilityEnrichInFlight = null;
+    });
+}
 
 function persistScoringCache(metrics: QuantMetrics[]): void {
   if (!isUniverseFundamentallySparse(metrics)) {
@@ -169,7 +186,8 @@ async function enrichFullUniverse(universeId: UniverseId = "combined"): Promise<
 export async function getScoringUniverseMetrics(): Promise<QuantMetrics[]> {
   const cached = getCachedScoringUniverse();
   if (cached) {
-    await ensureScoringFieldsEnriched(cached);
+    void ensureScoringFieldsEnriched(cached);
+    triggerStabilityBackground(cached);
     triggerFullUniverseBackground();
     return cached;
   }
@@ -195,6 +213,7 @@ async function loadScoringUniverseMetrics(): Promise<QuantMetrics[]> {
 
   persistScoringCache(metrics);
 
+  triggerStabilityBackground(metrics);
   triggerFullUniverseBackground();
   return metrics;
 }
@@ -321,7 +340,7 @@ export async function getRanking(
 ): Promise<RankingResponse> {
   const weights = resolveWeights(strategyId, customWeights);
   const weightsKey = JSON.stringify(weights);
-  const rankingCacheKey = `ranking:v2:${strategyId}:${universeId}:${limit}:${weightsKey}`;
+  const rankingCacheKey = `ranking:v3:${strategyId}:${universeId}:${limit}:${weightsKey}`;
   const cachedRanking = getCached<RankingResponse>(rankingCacheKey);
   if (cachedRanking) return cachedRanking;
 
@@ -353,8 +372,25 @@ export async function getFactorDetail(
   universeId: UniverseId = "combined",
   weights?: FactorWeights
 ) {
+  const w = weights ?? {
+    quality: 30,
+    growth: 25,
+    momentum: 20,
+    value: 15,
+    stability: 10,
+  };
+  const detailCacheKey = `factor-detail:v1:${ticker}:${universeId}:${JSON.stringify(w)}`;
+  const cached = getCached<Awaited<ReturnType<typeof getStockFactorDetail>>>(
+    detailCacheKey
+  );
+  if (cached) return cached;
+
   const universe = await getUniverseMetrics(universeId);
-  return getStockFactorDetail(ticker, universe, weights);
+  const detail = getStockFactorDetail(ticker, universe, w);
+  if (detail) {
+    setCached(detailCacheKey, detail, RANKING_CACHE_TTL);
+  }
+  return detail;
 }
 
 export async function getStrategyResults(
