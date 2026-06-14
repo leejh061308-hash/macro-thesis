@@ -1,15 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Card from "@/components/ui/Card";
 import WarmupTrigger from "@/components/quant/WarmupTrigger";
 import StrategyAtAGlance from "@/components/home/StrategyAtAGlance";
-import TodaysOpportunities from "@/components/timing/TodaysOpportunities";
+import TodaysOpportunities, {
+  fetchOpportunities,
+} from "@/components/timing/TodaysOpportunities";
 import RecommendedStocks from "@/components/home/RecommendedStocks";
 import MarketSummary from "@/components/home/MarketSummary";
 import type { StrategyOverviewItem } from "@/lib/quant/strategy-overview";
 import type { StrategyResult } from "@/lib/quant/types";
+import type { TimingOpportunity } from "@/lib/timing/types";
 
 interface HomeData {
   strategies: StrategyOverviewItem[];
@@ -24,12 +27,30 @@ export default function HomePage() {
   const [data, setData] = useState<HomeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [opportunities, setOpportunities] = useState<TimingOpportunity[]>([]);
+  const [oppLoading, setOppLoading] = useState(true);
+  const [oppError, setOppError] = useState<string | null>(null);
 
   useEffect(() => {
     const hour = new Date().getHours();
     if (hour < 12) setGreeting("좋은 아침이에요");
     else if (hour < 18) setGreeting("오늘의 시장 흐름");
     else setGreeting("오늘의 투자 인사이트");
+  }, []);
+
+  const loadOpportunities = useCallback(async (signal?: AbortSignal) => {
+    setOppLoading(true);
+    setOppError(null);
+    try {
+      const items = await fetchOpportunities(signal);
+      setOpportunities(items);
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return;
+      setOpportunities([]);
+      setOppError("오늘의 기회를 불러오지 못했습니다.");
+    } finally {
+      setOppLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -60,6 +81,16 @@ export default function HomePage() {
     };
   }, []);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60_000);
+    void loadOpportunities(controller.signal);
+    return () => {
+      controller.abort();
+      clearTimeout(timeout);
+    };
+  }, [loadOpportunities]);
+
   return (
     <div className="space-y-6 pb-2">
       <WarmupTrigger />
@@ -82,7 +113,13 @@ export default function HomePage() {
         loading={loading}
       />
 
-      <TodaysOpportunities variant="home" />
+      <TodaysOpportunities
+        variant="home"
+        items={opportunities}
+        loading={oppLoading}
+        error={oppError}
+        onRetry={() => loadOpportunities()}
+      />
 
       <RecommendedStocks
         stocks={data?.recommended ?? []}

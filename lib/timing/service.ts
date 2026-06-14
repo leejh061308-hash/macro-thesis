@@ -3,7 +3,7 @@ import {
   setCached,
 } from "@/lib/quant/cache";
 import { fetchTickerMetrics } from "@/lib/quant/metrics-service";
-import { getScoringUniverseMetrics, getCachedScoringUniverse, getUniverseMetrics } from "@/lib/quant/service";
+import { getScoringUniverseMetrics, getCachedScoringUniverse } from "@/lib/quant/service";
 import { isEntryEnvLikelyStale } from "@/lib/quant/universe-health";
 import type { QuantMetrics } from "@/lib/quant/types";
 import { BASIC_STYLE_STRATEGY_IDS } from "@/lib/quant/constants";
@@ -124,35 +124,57 @@ export async function getTimingHistory(
 export async function getTodaysOpportunities(
   limit = 10
 ): Promise<TimingOpportunity[]> {
-  const cacheKey = "timing:opportunities";
+  const cacheKey = "timing:opportunities:v2";
   const cached = getCached<TimingOpportunity[]>(cacheKey);
   if (cached) return cached;
 
-  const universe = await getUniverseMetrics();
-  const tickers = universe.slice(0, 60).map((m) => m.ticker);
-  const opportunities: TimingOpportunity[] = [];
+  const universe = await getUniverseForScoring();
+  const watchlist = await listWatchlistSafe().catch(() => []);
+  const watchTickers = watchlist.map((w) => w.ticker);
+  const universeTickers = universe.slice(0, 24).map((m) => m.ticker);
+  const tickers = [...new Set([...watchTickers, ...universeTickers])].slice(0, 28);
 
-  for (const ticker of tickers) {
-    const result = await getTimingScore(ticker);
-    if (!result || result.priorScore30d == null || result.scoreChange30d == null)
-      continue;
-    if (result.scoreChange30d >= 12) {
-      opportunities.push({
-        ticker: result.ticker,
-        name: result.name,
-        timingScore: result.timingScore,
-        priorScore: result.priorScore30d,
-        change: result.scoreChange30d,
-        timingLabel: result.timingLabel,
-      });
+  const opportunities: TimingOpportunity[] = [];
+  const BATCH = 7;
+
+  for (let i = 0; i < tickers.length; i += BATCH) {
+    const batch = tickers.slice(i, i + BATCH);
+    const results = await Promise.all(
+      batch.map((ticker) =>
+        getTimingScore(ticker).catch(() => null)
+      )
+    );
+
+    for (const result of results) {
+      if (
+        !result ||
+        result.priorScore30d == null ||
+        result.scoreChange30d == null
+      ) {
+        continue;
+      }
+      if (result.scoreChange30d >= 10) {
+        opportunities.push({
+          ticker: result.ticker,
+          name: result.name,
+          timingScore: result.timingScore,
+          priorScore: result.priorScore30d,
+          change: result.scoreChange30d,
+          timingLabel: result.timingLabel,
+        });
+      }
     }
+
+    if (opportunities.length >= limit * 2) break;
   }
 
   const sorted = opportunities
     .sort((a, b) => b.change - a.change)
     .slice(0, limit);
 
-  setCached(cacheKey, sorted, TIMING_CACHE_TTL);
+  if (sorted.length > 0) {
+    setCached(cacheKey, sorted, TIMING_CACHE_TTL);
+  }
   return sorted;
 }
 
