@@ -19,11 +19,13 @@ const STRATEGY_EMOJI: Partial<Record<StrategyId, string>> = {
 interface StrategyAtAGlanceProps {
   strategies: StrategyOverviewItem[];
   loading?: boolean;
+  warming?: boolean;
 }
 
 export default function StrategyAtAGlance({
   strategies,
   loading,
+  warming,
 }: StrategyAtAGlanceProps) {
   const leader = strategies[0];
 
@@ -34,7 +36,10 @@ export default function StrategyAtAGlance({
           <h3 className="section-title">현재 유리한 전략</h3>
           <p className="section-subtitle">8대 스타일 한눈에 비교</p>
         </div>
-        {leader && !loading && (
+        {warming && (
+          <p className="text-[10px] text-muted animate-pulse">업데이트 중…</p>
+        )}
+        {leader && !loading && !warming && (
           <p className="text-[10px] text-muted">
             1위{" "}
             <span className="font-semibold text-accent">{leader.shortName}</span>
@@ -73,7 +78,7 @@ export default function StrategyAtAGlance({
                 </div>
               </div>
               <span className="w-7 shrink-0 text-right text-sm font-semibold text-text">
-                {s.suitabilityScore}
+                {warming && s.suitabilityScore === 0 ? "…" : s.suitabilityScore}
               </span>
               <span
                 className={`hidden w-10 shrink-0 text-right text-[10px] font-medium sm:inline ${statusColor(s.statusLabel)}`}

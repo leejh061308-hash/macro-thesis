@@ -2,6 +2,7 @@ import {
   BACKTEST_CACHE_TTL,
   getCached,
   METRICS_CACHE_TTL,
+  peekCached,
   setCached,
 } from "./cache";
 import {
@@ -14,15 +15,17 @@ import {
 } from "./cache-keys";
 import {
   enrichMomentumFromPrices,
-  enrichScoringPool,
   enrichFullScoringPool,
+  enrichFinnhubCoreMetrics,
   enrichGrowthFields,
   enrichStabilityFromPrices,
   enrichValueFields,
   fetchUniverseProfiles,
+  deriveComputedMetrics,
 } from "./metrics-service";
-import { getScoringTickerList, selectScoringUniverse } from "./scoring-universe";
 import { enrichFundamentalsFromYahoo } from "./yahoo-fundamentals";
+import { getFallbackStrategyOverviews } from "./fallback-overviews";
+import { getScoringTickerList, selectScoringUniverse } from "./scoring-universe";
 import {
   fundamentalCoverage,
   isEntryEnvLikelyStale,
@@ -90,10 +93,62 @@ const SCORING_CACHE_KEY = SCORING_METRICS_CACHE_KEY;
 
 export { SCORING_METRICS_CACHE_KEY };
 
+const SCORING_ENRICH_BUDGET_MS = 8_000;
+
 let fullUniverseInFlight: Promise<void> | null = null;
 let scoringInFlight: Promise<QuantMetrics[]> | null = null;
 let scoringEnrichInFlight: Promise<void> | null = null;
+let slowEnrichInFlight: Promise<void> | null = null;
 let stabilityEnrichInFlight: Promise<void> | null = null;
+let overviewRefreshInFlight: Promise<void> | null = null;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function enrichScoringFast(metrics: QuantMetrics[]): Promise<void> {
+  await Promise.race([
+    Promise.all([
+      enrichFundamentalsFromYahoo(metrics, { concurrency: 12 }),
+      enrichFinnhubCoreMetrics(metrics),
+    ]),
+    sleep(SCORING_ENRICH_BUDGET_MS),
+  ]);
+}
+
+function refreshOverviewCache(universe: QuantMetrics[]): void {
+  if (overviewRefreshInFlight) return;
+  overviewRefreshInFlight = Promise.resolve()
+    .then(() => {
+      const overviews = computeAllStrategyOverviews(universe);
+      if (overviews.length > 0) {
+        setCached(OVERVIEW_CACHE_KEY, overviews, METRICS_CACHE_TTL);
+      }
+    })
+    .finally(() => {
+      overviewRefreshInFlight = null;
+    });
+}
+
+function completeSlowScoringEnrich(metrics: QuantMetrics[]): void {
+  if (slowEnrichInFlight) return;
+
+  slowEnrichInFlight = (async () => {
+    await enrichGrowthFields(metrics);
+    await enrichValueFields(metrics);
+    await enrichMomentumFromPrices(metrics, {
+      range: "3y",
+      concurrency: 8,
+      essentialOnly: true,
+    });
+    deriveComputedMetrics(metrics);
+    persistScoringCache(metrics);
+    refreshOverviewCache(metrics);
+    triggerStabilityBackground(metrics);
+  })().finally(() => {
+    slowEnrichInFlight = null;
+  });
+}
 
 function triggerStabilityBackground(metrics: QuantMetrics[]): void {
   const needs = metrics.some(
@@ -182,7 +237,7 @@ async function enrichFullUniverse(universeId: UniverseId = "combined"): Promise<
   setCached(cacheKey, metrics, METRICS_CACHE_TTL);
 }
 
-/** 기본 탭·전략 카드용 — 대형주 50종목만 빠르게 준비 */
+/** 기본 탭·전략 카드용 — 대형주 36종목만 빠르게 준비 */
 export async function getScoringUniverseMetrics(): Promise<QuantMetrics[]> {
   const cached = getCachedScoringUniverse();
   if (cached) {
@@ -201,19 +256,17 @@ export async function getScoringUniverseMetrics(): Promise<QuantMetrics[]> {
 }
 
 async function loadScoringUniverseMetrics(): Promise<QuantMetrics[]> {
-  let cached = getCached<QuantMetrics[]>(SCORING_CACHE_KEY);
   const tickers = getScoringTickerList();
-  const metrics =
-    cached?.length === tickers.length
-      ? cached
-      : await fetchUniverseProfiles(tickers);
+  let metrics = peekCached<QuantMetrics[]>(SCORING_CACHE_KEY)?.data;
 
-  await enrichScoringPool(metrics);
-  await ensureScoringFieldsEnriched(metrics);
+  if (!metrics?.length || metrics.length !== tickers.length) {
+    metrics = await fetchUniverseProfiles(tickers);
+    persistScoringCache(metrics);
+  }
 
+  await enrichScoringFast(metrics);
   persistScoringCache(metrics);
-
-  triggerStabilityBackground(metrics);
+  completeSlowScoringEnrich(metrics);
   triggerFullUniverseBackground();
   return metrics;
 }
@@ -245,22 +298,24 @@ export async function getStrategyOverviews(options?: {
   includeEntry?: boolean;
 }): Promise<StrategyOverviewItem[]> {
   const includeEntry = options?.includeEntry !== false;
-  const cached = getCached<StrategyOverviewItem[]>(OVERVIEW_CACHE_KEY);
-  if (
-    cached?.length &&
-    !isOverviewLikelyStale(cached) &&
-    !isGrowthOverviewStale(cached) &&
-    !isValueOverviewStale(cached)
-  ) {
-    if (!includeEntry) {
-      return cached.map((o) => ({
-        ...o,
-        entryScore: isEntryEnvLikelyStale(cached) ? -1 : o.entryScore,
-        entryLabel: isEntryEnvLikelyStale(cached) ? "…" : o.entryLabel,
-      }));
+  const cachedPeek = peekCached<StrategyOverviewItem[]>(OVERVIEW_CACHE_KEY);
+
+  if (cachedPeek) {
+    if (!cachedPeek.isFresh) {
+      void getScoringUniverseMetrics().then((universe) =>
+        refreshOverviewCache(universe)
+      );
     }
-    if (!isEntryEnvLikelyStale(cached)) {
-      return cached;
+    return mapOverviewEntry(cachedPeek.data, includeEntry);
+  }
+
+  const scoringPeek = peekCached<QuantMetrics[]>(SCORING_CACHE_KEY);
+  if (scoringPeek?.data.length) {
+    const overviews = computeAllStrategyOverviews(scoringPeek.data);
+    if (overviews.some((o) => o.suitabilityScore > 0)) {
+      setCached(OVERVIEW_CACHE_KEY, overviews, METRICS_CACHE_TTL);
+      void getScoringUniverseMetrics();
+      return mapOverviewEntry(overviews, includeEntry);
     }
   }
 
@@ -268,11 +323,11 @@ export async function getStrategyOverviews(options?: {
   const overviews = computeAllStrategyOverviews(universe);
 
   if (!includeEntry) {
-    return overviews.map((o) => ({
-      ...o,
-      entryScore: -1,
-      entryLabel: "…",
-    }));
+    const mapped = mapOverviewEntry(overviews, false);
+    if (mapped.some((o) => o.suitabilityScore > 0)) {
+      setCached(OVERVIEW_CACHE_KEY, mapped, METRICS_CACHE_TTL);
+    }
+    return mapped;
   }
 
   const entryCached = getCached<
@@ -306,6 +361,39 @@ export async function getStrategyOverviews(options?: {
     setCached(OVERVIEW_CACHE_KEY, merged, METRICS_CACHE_TTL);
   }
   return merged;
+}
+
+export function getInstantStrategyOverviews(): {
+  strategies: StrategyOverviewItem[];
+  warming: boolean;
+} {
+  const peek = peekCached<StrategyOverviewItem[]>(OVERVIEW_CACHE_KEY);
+  if (peek) {
+    if (!peek.isFresh) void getScoringUniverseMetrics();
+    return { strategies: peek.data, warming: !peek.isFresh };
+  }
+
+  const scoring = peekCached<QuantMetrics[]>(SCORING_CACHE_KEY);
+  if (scoring?.data.length) {
+    const strategies = computeAllStrategyOverviews(scoring.data);
+    void getScoringUniverseMetrics();
+    return { strategies, warming: true };
+  }
+
+  void getScoringUniverseMetrics();
+  return { strategies: getFallbackStrategyOverviews(), warming: true };
+}
+
+function mapOverviewEntry(
+  overviews: StrategyOverviewItem[],
+  includeEntry: boolean
+): StrategyOverviewItem[] {
+  if (includeEntry) return overviews;
+  return overviews.map((o) => ({
+    ...o,
+    entryScore: -1,
+    entryLabel: "…",
+  }));
 }
 
 export async function getStrategyResultsWithTiming(
@@ -398,6 +486,35 @@ export async function getStrategyResults(
   limit = 20
 ): Promise<StrategyResult[]> {
   const universe = await getScoringUniverseMetrics();
+  return enrichAndRankStrategyResults(strategyId, universe, limit);
+}
+
+/** quick=1 — 캐시만 사용, cold start에서 빈 배열 반환 후 백그라운드 워밍 */
+export function getQuickStrategyResults(
+  strategyId: StrategyId,
+  limit = 20
+): StrategyResult[] {
+  const peek = peekCached<QuantMetrics[]>(SCORING_CACHE_KEY);
+  if (peek?.data.length) {
+    void getScoringUniverseMetrics();
+    return rankByStrategy(strategyId, peek.data, limit);
+  }
+
+  const cached = getCachedScoringUniverse();
+  if (cached) {
+    void getScoringUniverseMetrics();
+    return rankByStrategy(strategyId, cached, limit);
+  }
+
+  void getScoringUniverseMetrics();
+  return [];
+}
+
+async function enrichAndRankStrategyResults(
+  strategyId: StrategyId,
+  universe: QuantMetrics[],
+  limit: number
+): Promise<StrategyResult[]> {
   let results = rankByStrategy(strategyId, universe, limit);
 
   const growthLike: StrategyId[] = [

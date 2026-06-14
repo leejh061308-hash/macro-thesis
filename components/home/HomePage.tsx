@@ -20,6 +20,7 @@ interface HomeData {
   recommended: StrategyResult[];
   marketSummary: string;
   topStrategies: StrategyOverviewItem[];
+  warming?: boolean;
 }
 
 export default function HomePage() {
@@ -54,30 +55,39 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 45_000);
+    let cancelled = false;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-    fetch("/api/home", { cache: "no-store", signal: controller.signal })
-      .then((res) => res.json())
-      .then((json) => {
+    async function loadHome() {
+      try {
+        const res = await fetch("/api/home", { cache: "no-store" });
+        const json = await res.json();
+        if (cancelled) return;
         if (json.error) throw new Error(json.error);
         setData(json as HomeData);
-      })
-      .catch((e) => {
-        if (e instanceof Error && e.name === "AbortError") {
-          setError("로딩 시간이 초과되었습니다. 새로고침해 주세요.");
-        } else {
-          setError("데이터를 불러오지 못했습니다.");
+        setError(null);
+
+        if (json.warming) {
+          if (!pollTimer) {
+            pollTimer = setInterval(() => void loadHome(), 5000);
+          }
+        } else if (pollTimer) {
+          clearInterval(pollTimer);
+          pollTimer = null;
         }
-      })
-      .finally(() => {
-        setLoading(false);
-        clearTimeout(timeout);
-      });
+      } catch (e) {
+        if (cancelled) return;
+        setError("데이터를 불러오지 못했습니다.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void loadHome();
 
     return () => {
-      controller.abort();
-      clearTimeout(timeout);
+      cancelled = true;
+      if (pollTimer) clearInterval(pollTimer);
     };
   }, []);
 
@@ -110,7 +120,8 @@ export default function HomePage() {
 
       <StrategyAtAGlance
         strategies={data?.strategies ?? []}
-        loading={loading}
+        loading={loading && !data}
+        warming={Boolean(data?.warming)}
       />
 
       <TodaysOpportunities
@@ -124,13 +135,13 @@ export default function HomePage() {
       <RecommendedStocks
         stocks={data?.recommended ?? []}
         topStrategy={data?.topStrategy?.shortName ?? ""}
-        loading={loading}
+        loading={loading && !data}
       />
 
       <MarketSummary
         summary={data?.marketSummary ?? ""}
         topStrategies={data?.topStrategies ?? []}
-        loading={loading}
+        loading={loading && !data}
       />
 
       <Card interactive padding="md" className="text-center">

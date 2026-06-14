@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { getCached, setCached, STALE_GRACE_TTL, getStaleCached } from "@/lib/quant/cache";
+import { peekCached, setCached, STALE_GRACE_TTL } from "@/lib/quant/cache";
 import { HOME_API_CACHE_KEY, HOME_API_CACHE_TTL } from "@/lib/quant/cache-keys";
 import { BASIC_STYLE_STRATEGY_IDS } from "@/lib/quant/constants";
+import { getFallbackStrategyOverviews } from "@/lib/quant/fallback-overviews";
 import {
   getStrategyOverviews,
   getStrategyResults,
@@ -18,26 +19,17 @@ let homeRefreshInFlight: Promise<HomePayload> | null = null;
 
 export async function GET() {
   try {
-    const fresh = getCached<HomePayload>(HOME_API_CACHE_KEY);
-    if (fresh) {
-      return NextResponse.json(fresh);
+    const peek = peekCached<HomePayload>(HOME_API_CACHE_KEY, STALE_GRACE_TTL);
+    if (peek) {
+      if (!peek.isFresh) void refreshHomeCache();
+      return NextResponse.json({ ...peek.data, warming: !peek.isFresh });
     }
 
-    const stale = getStaleCached<HomePayload>(
-      HOME_API_CACHE_KEY,
-      STALE_GRACE_TTL
-    );
-    if (stale) {
-      void refreshHomeCache();
-      return NextResponse.json(stale);
-    }
+    void ensureQuantCacheWarm();
 
-    if (getQuantCacheStatus() !== "ready") {
-      void ensureQuantCacheWarm();
-    }
-
-    const payload = await refreshHomeCache();
-    return NextResponse.json(payload);
+    const fallback = buildFallbackHomePayload();
+    void refreshHomeCache();
+    return NextResponse.json({ ...fallback, warming: true });
   } catch (error) {
     console.error("[home]", error);
     return NextResponse.json(
@@ -45,6 +37,20 @@ export async function GET() {
       { status: 500 }
     );
   }
+}
+
+function buildFallbackHomePayload(): HomePayload {
+  const strategies = getFallbackStrategyOverviews();
+  return {
+    strategies,
+    topStrategy: strategies[0]
+      ? { id: strategies[0].id, shortName: strategies[0].shortName }
+      : null,
+    recommended: [],
+    marketSummary: "시장 데이터를 준비 중입니다.",
+    topStrategies: strategies.slice(0, 3),
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 async function refreshHomeCache(): Promise<HomePayload> {

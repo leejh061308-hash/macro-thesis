@@ -2,7 +2,7 @@ import type { QuantMetrics } from "./types";
 import { getUniverseTickers } from "./index-universe";
 
 /** 기본 탭·전략 카드용 빠른 스코어링 풀 (대형주 우선) */
-export const SCORING_POOL_SIZE = 50;
+export const SCORING_POOL_SIZE = 36;
 
 export function getScoringTickerList(): string[] {
   return getUniverseTickers("combined").slice(0, SCORING_POOL_SIZE);

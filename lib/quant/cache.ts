@@ -24,6 +24,24 @@ export function getStaleCached<T>(
   return entry.data as T;
 }
 
+export function peekCached<T>(
+  key: string,
+  staleGraceMs = STALE_GRACE_TTL
+): { data: T; isFresh: boolean } | null {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  const isFresh = Date.now() <= entry.expiresAt;
+  if (Date.now() > entry.expiresAt + staleGraceMs) {
+    cache.delete(key);
+    return null;
+  }
+  return { data: entry.data as T, isFresh };
+}
+
+export function deleteCached(key: string): void {
+  cache.delete(key);
+}
+
 export function setCached<T>(key: string, data: T, ttlMs: number): void {
   cache.set(key, { data, expiresAt: Date.now() + ttlMs });
 }

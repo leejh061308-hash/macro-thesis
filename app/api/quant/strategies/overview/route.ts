@@ -1,15 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getStrategyOverviews } from "@/lib/quant/service";
+import {
+  getInstantStrategyOverviews,
+  getStrategyOverviews,
+} from "@/lib/quant/service";
 import { isMetricsAvailable } from "@/lib/quant/metrics-service";
 import { getQuantCacheStatus } from "@/lib/quant/warmup";
 
 export async function GET(request: NextRequest) {
   try {
     const quick = request.nextUrl.searchParams.get("quick") === "1";
-    const overviews = await getStrategyOverviews({ includeEntry: !quick });
+
+    if (quick) {
+      const instant = getInstantStrategyOverviews();
+      if (instant.warming) {
+        void getStrategyOverviews({ includeEntry: false });
+      }
+      return NextResponse.json({
+        strategies: instant.strategies,
+        partial: instant.warming,
+        warming: instant.warming,
+        metricsAvailable: isMetricsAvailable(),
+        dataSources: {
+          finnhub: isMetricsAvailable(),
+          yahoo: true,
+        },
+        cacheStatus: getQuantCacheStatus(),
+      });
+    }
+
+    const overviews = await getStrategyOverviews({ includeEntry: true });
     return NextResponse.json({
       strategies: overviews,
-      partial: quick,
+      partial: false,
+      warming: false,
       metricsAvailable: isMetricsAvailable(),
       dataSources: {
         finnhub: isMetricsAvailable(),

@@ -31,6 +31,7 @@ export default function StrategyOverviewPanel({
   const [strategies, setStrategies] = useState<StrategyOverviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [entryLoading, setEntryLoading] = useState(true);
+  const [warming, setWarming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -38,20 +39,17 @@ export default function StrategyOverviewPanel({
       () => {}
     );
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 90_000);
     let cancelled = false;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-    async function load() {
+    async function load(isPoll = false) {
       try {
         const [overviewRes, entryRes] = await Promise.all([
           fetch("/api/quant/strategies/overview?quick=1", {
             cache: "no-store",
-            signal: controller.signal,
           }),
           fetch("/api/timing/strategy-environment", {
             cache: "no-store",
-            signal: controller.signal,
           }),
         ]);
 
@@ -60,6 +58,9 @@ export default function StrategyOverviewPanel({
         if (overviewData.error) throw new Error(overviewData.error);
 
         const all = (overviewData.strategies ?? []) as StrategyOverviewItem[];
+        const isWarming = Boolean(overviewData.warming || overviewData.partial);
+        setWarming(isWarming);
+
         const entryData = await entryRes.json();
         if (cancelled) return;
 
@@ -89,20 +90,26 @@ export default function StrategyOverviewPanel({
             })
         );
         setLoading(false);
-        setEntryLoading(false);
+        setEntryLoading(entryLooksStale);
+        setError(null);
+
+        if (isWarming && !cancelled) {
+          if (!pollTimer) {
+            pollTimer = setInterval(() => void load(true), 5000);
+          }
+        } else if (pollTimer) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
       } catch (e) {
         if (cancelled) return;
-        if (e instanceof Error && e.name === "AbortError") {
-          setError("데이터 준비 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.");
-        } else {
+        if (!isPoll) {
           setError(e instanceof Error ? e.message : "로드 실패");
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && !isPoll) {
           setLoading(false);
-          setEntryLoading(false);
         }
-        clearTimeout(timeout);
       }
     }
 
@@ -110,8 +117,7 @@ export default function StrategyOverviewPanel({
 
     return () => {
       cancelled = true;
-      clearTimeout(timeout);
-      controller.abort();
+      if (pollTimer) clearInterval(pollTimer);
     };
   }, []);
 
@@ -120,7 +126,9 @@ export default function StrategyOverviewPanel({
       <div>
         <h3 className="section-title">투자 전략</h3>
         <p className="section-subtitle">
-          현재 어떤 스타일이 유리한지 확인하세요
+          {warming
+            ? "시장 데이터를 불러오는 중…"
+            : "현재 어떤 스타일이 유리한지 확인하세요"}
         </p>
       </div>
 
@@ -144,6 +152,7 @@ export default function StrategyOverviewPanel({
               key={s.id}
               strategy={s}
               entryLoading={entryLoading || s.entryLabel === "…"}
+              warming={warming && s.suitabilityScore === 0}
               onClick={() => onSelectStrategy(s.id)}
             />
           ))}
@@ -156,10 +165,12 @@ export default function StrategyOverviewPanel({
 function StrategyCard({
   strategy,
   entryLoading,
+  warming,
   onClick,
 }: {
   strategy: StrategyOverviewItem;
   entryLoading: boolean;
+  warming: boolean;
   onClick: () => void;
 }) {
   return (
@@ -175,13 +186,19 @@ function StrategyCard({
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div>
             <p className="text-[10px] text-muted">전략 적합도</p>
-            <p className="text-2xl font-semibold text-accent">
-              {strategy.suitabilityScore}
-              <span className="text-xs font-normal text-muted">점</span>
-            </p>
-            <p className={`text-xs font-medium ${statusColor(strategy.statusLabel)}`}>
-              {strategy.statusLabel}
-            </p>
+            {warming ? (
+              <p className="mt-1 text-xs text-muted animate-pulse">계산 중…</p>
+            ) : (
+              <>
+                <p className="text-2xl font-semibold text-accent">
+                  {strategy.suitabilityScore}
+                  <span className="text-xs font-normal text-muted">점</span>
+                </p>
+                <p className={`text-xs font-medium ${statusColor(strategy.statusLabel)}`}>
+                  {strategy.statusLabel}
+                </p>
+              </>
+            )}
           </div>
           <div>
             <p className="text-[10px] text-muted">진입 환경</p>
