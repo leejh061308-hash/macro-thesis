@@ -250,15 +250,19 @@ export async function enrichMomentumFromPrices(
   const spyReturn12m = computeTrailingReturn(spyPrices, 12);
 
   const needsEnrich = metrics.filter((m) => {
-    if (
+    const needsMomentum =
       m.return12m == null ||
       m.return3m == null ||
-      m.relativeStrength == null
-    ) {
-      return true;
+      m.relativeStrength == null;
+    const needsStability = m.volatility == null || m.maxDrawdown == null;
+
+    if (essentialOnly) {
+      return needsMomentum || needsStability;
     }
-    if (essentialOnly) return false;
+
     return (
+      needsMomentum ||
+      needsStability ||
       m.return1m == null ||
       m.position52w == null ||
       m.maAbove20 == null
@@ -285,6 +289,8 @@ export async function enrichMomentumFromPrices(
       if (m.relativeStrength == null && m.return12m != null && spyReturn12m != null) {
         m.relativeStrength = m.return12m - spyReturn12m;
       }
+
+      applyStabilityFromPrices(m, prices);
 
       if (essentialOnly) continue;
 
@@ -328,6 +334,63 @@ function computeTrailingReturn(
   const start = prices[prices.length - 1 - months].close;
   if (start <= 0) return null;
   return (end - start) / start;
+}
+
+/** 월간 수익률 표준편차 → 연환산 변동성 */
+export function computeVolatilityFromPrices(
+  prices: { close: number }[],
+  lookbackMonths = 24
+): number | null {
+  const slice = prices.slice(-Math.min(lookbackMonths + 1, prices.length));
+  if (slice.length < 6) return null;
+
+  const returns: number[] = [];
+  for (let i = 1; i < slice.length; i++) {
+    const prev = slice[i - 1].close;
+    if (prev <= 0) continue;
+    returns.push((slice[i].close - prev) / prev);
+  }
+  if (returns.length < 4) return null;
+
+  const mean = returns.reduce((s, r) => s + r, 0) / returns.length;
+  const variance =
+    returns.reduce((s, r) => s + (r - mean) ** 2, 0) / returns.length;
+  const monthlyVol = Math.sqrt(variance);
+  return monthlyVol * Math.sqrt(12);
+}
+
+/** peak-to-trough 최대 낙폭 (0~1) */
+export function computeMaxDrawdownFromPrices(
+  prices: { close: number }[],
+  lookbackMonths = 36
+): number | null {
+  const slice = prices.slice(-Math.min(lookbackMonths, prices.length));
+  if (slice.length < 4) return null;
+
+  let peak = slice[0].close;
+  let maxDd = 0;
+  for (const p of slice) {
+    if (p.close > peak) peak = p.close;
+    if (peak > 0) {
+      const dd = (peak - p.close) / peak;
+      if (dd > maxDd) maxDd = dd;
+    }
+  }
+  return maxDd > 0 ? maxDd : 0;
+}
+
+function applyStabilityFromPrices(
+  m: QuantMetrics,
+  prices: { close: number }[]
+): void {
+  if (m.volatility == null) {
+    const vol = computeVolatilityFromPrices(prices);
+    if (vol != null) m.volatility = vol;
+  }
+  if (m.maxDrawdown == null) {
+    const mdd = computeMaxDrawdownFromPrices(prices);
+    if (mdd != null) m.maxDrawdown = mdd;
+  }
 }
 
 export async function fetchTickerMetrics(

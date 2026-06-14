@@ -371,32 +371,32 @@ const MOMENTUM_FIELDS: FactorField[] = [
 const STABILITY_FIELDS: FactorField[] = [
   {
     getter: (m) => m.beta,
-    weight: 20,
+    weight: 25,
     lowerIsBetter: true,
     valid: (m) => m.beta != null,
   },
   {
     getter: (m) => m.volatility,
-    weight: 20,
+    weight: 30,
     lowerIsBetter: true,
-    valid: (m) => m.volatility != null,
+    valid: (m) => m.volatility != null && m.volatility > 0,
   },
   {
     getter: (m) => m.maxDrawdown,
-    weight: 20,
+    weight: 30,
     lowerIsBetter: true,
     valid: (m) => m.maxDrawdown != null,
   },
   {
     getter: (m) => m.debtToEquity,
-    weight: 20,
+    weight: 8,
     lowerIsBetter: true,
     valid: (m) => m.debtToEquity != null && m.debtToEquity >= 0,
     excludeSectors: ["financial"],
   },
   {
     getter: (m) => m.currentRatio,
-    weight: 20,
+    weight: 7,
     lowerIsBetter: false,
     valid: (m) => m.currentRatio != null && m.currentRatio > 0,
     excludeSectors: ["financial", "reit"],
