@@ -1,42 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Card from "@/components/ui/Card";
 import { statusColor, type StrategyOverviewItem } from "@/lib/quant/strategy-overview";
 
-export default function MarketSummary() {
-  const [summary, setSummary] = useState<string>("");
-  const [topStrategies, setTopStrategies] = useState<StrategyOverviewItem[]>([]);
-  const [loading, setLoading] = useState(true);
+interface MarketSummaryProps {
+  summary: string;
+  topStrategies: StrategyOverviewItem[];
+  loading?: boolean;
+}
 
-  useEffect(() => {
-    fetch("/api/quant/strategies/overview?quick=1", { cache: "no-store" })
-      .then((res) => res.json())
-      .then((data) => {
-        const all = (data.strategies ?? []) as StrategyOverviewItem[];
-        const sorted = [...all]
-          .filter((s) => s.suitabilityScore > 0)
-          .sort((a, b) => b.suitabilityScore - a.suitabilityScore);
-        const top3 = sorted.slice(0, 3);
-        setTopStrategies(top3);
-
-        if (top3.length === 0) {
-          setSummary("현재 시장 데이터를 분석 중입니다.");
-        } else {
-          setSummary(
-            `현재 ${top3.map((s) => s.shortName).join("·")} 스타일이 상대적으로 유리합니다. ${top3[0].marketInsight}`
-          );
-        }
-      })
-      .catch(() => setSummary("시장 요약을 불러오지 못했습니다."))
-      .finally(() => setLoading(false));
-  }, []);
-
+export default function MarketSummary({
+  summary,
+  topStrategies,
+  loading,
+}: MarketSummaryProps) {
   if (loading) {
     return (
-      <div className="h-28 animate-pulse rounded-card bg-surface-card shadow-card" />
+      <div className="h-24 animate-pulse rounded-card bg-surface-card shadow-card" />
     );
   }
+
+  if (!summary) return null;
 
   return (
     <section>
