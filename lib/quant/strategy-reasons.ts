@@ -51,7 +51,10 @@ export function buildSelectionReasons(
     case "growth":
       if (metrics.revenueGrowth != null && metrics.revenueGrowth >= 0.08) reasons.push("매출 성장률 우수");
       if (metrics.epsGrowth != null && metrics.epsGrowth >= 0.08) reasons.push("EPS 성장률 우수");
-      if (metrics.operatingMargin != null && metrics.operatingMargin >= 0.15) reasons.push("영업이익률 양호");
+      if (metrics.operatingIncomeGrowth != null && metrics.operatingIncomeGrowth >= 0.08) {
+        reasons.push("영업이익 성장률 우수");
+      }
+      if (metrics.fcfGrowth != null && metrics.fcfGrowth >= 0.08) reasons.push("FCF 성장률 우수");
       break;
     case "dividend":
       if (metrics.dividendYield != null && metrics.dividendYield >= 0.025) reasons.push("배당수익률 양호");

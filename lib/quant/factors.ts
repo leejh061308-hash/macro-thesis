@@ -1,4 +1,10 @@
-import type { FactorId, FactorScores, QuantMetrics } from "./types";
+import type {
+  DataConfidence,
+  FactorId,
+  FactorScores,
+  QuantMetrics,
+} from "./types";
+import { getSectorClass, type SectorClass } from "./sector-class";
 
 type FieldGetter = (m: QuantMetrics) => number | null;
 
@@ -7,6 +13,21 @@ interface FactorField {
   weight: number;
   lowerIsBetter: boolean;
   valid: (m: QuantMetrics) => boolean;
+  excludeSectors?: SectorClass[];
+  includeOnlySectors?: SectorClass[];
+}
+
+export interface FactorScoreMeta {
+  score: number;
+  available: number;
+  total: number;
+  confidence: DataConfidence;
+}
+
+export interface FactorScoreBundle {
+  scores: FactorScores;
+  confidence: Record<FactorId, DataConfidence>;
+  meta: Record<FactorId, FactorScoreMeta>;
 }
 
 function collect(values: (number | null)[]): number[] {
@@ -26,6 +47,16 @@ export function percentileRank(
   return Math.round((rank / sorted.length) * 100);
 }
 
+function fieldApplies(field: FactorField, sector: SectorClass): boolean {
+  if (field.includeOnlySectors?.length) {
+    return field.includeOnlySectors.includes(sector);
+  }
+  if (field.excludeSectors?.length) {
+    return !field.excludeSectors.includes(sector);
+  }
+  return true;
+}
+
 function scoreField(
   universe: QuantMetrics[],
   ticker: string,
@@ -38,197 +69,418 @@ function scoreField(
   return percentileRank(values, mine, lowerIsBetter);
 }
 
+function confidenceFromCounts(available: number, total: number): DataConfidence {
+  if (total === 0 || available === 0) return "low";
+  const ratio = available / total;
+  if (ratio <= 0.25) return "low";
+  if (ratio <= 0.5) return "medium";
+  return "high";
+}
+
 function weightedFactorScore(
   universe: QuantMetrics[],
   metrics: QuantMetrics,
   fields: FactorField[]
-): number {
-  const parts = fields.map((f) => ({
+): FactorScoreMeta {
+  const sector = getSectorClass(metrics.ticker);
+  const applicable = fields.filter((f) => fieldApplies(f, sector));
+
+  const parts = applicable.map((f) => ({
     score: scoreField(universe, metrics.ticker, f.getter, f.lowerIsBetter),
     weight: f.weight,
     valid: f.valid(metrics),
   }));
   const valid = parts.filter((p) => p.valid);
-  if (valid.length === 0) return 0;
+
+  if (valid.length === 0) {
+    return {
+      score: 0,
+      available: 0,
+      total: applicable.length,
+      confidence: "low",
+    };
+  }
+
   const totalWeight = valid.reduce((s, p) => s + p.weight, 0);
   const sum = valid.reduce((s, p) => s + p.score * p.weight, 0);
-  return Math.round(sum / totalWeight);
+
+  return {
+    score: Math.round(sum / totalWeight),
+    available: valid.length,
+    total: applicable.length,
+    confidence: confidenceFromCounts(valid.length, applicable.length),
+  };
 }
 
 const VALUE_FIELDS: FactorField[] = [
   {
+    getter: (m) => m.forwardPE ?? m.peRatio,
+    weight: 18,
+    lowerIsBetter: true,
+    valid: (m) => {
+      const pe = m.forwardPE ?? m.peRatio;
+      return pe != null && pe > 0;
+    },
+  },
+  {
     getter: (m) => m.peRatio,
-    weight: 25,
+    weight: 18,
     lowerIsBetter: true,
     valid: (m) => m.peRatio != null && m.peRatio > 0,
   },
   {
     getter: (m) => m.pbRatio,
-    weight: 25,
+    weight: 18,
     lowerIsBetter: true,
     valid: (m) => m.pbRatio != null && m.pbRatio > 0,
   },
   {
     getter: (m) => m.evToEbitda,
-    weight: 25,
+    weight: 16,
     lowerIsBetter: true,
     valid: (m) => m.evToEbitda != null && m.evToEbitda > 0,
+    excludeSectors: ["financial", "reit"],
+  },
+  {
+    getter: (m) => m.priceToFCF,
+    weight: 15,
+    lowerIsBetter: true,
+    valid: (m) => m.priceToFCF != null && m.priceToFCF > 0,
+    excludeSectors: ["financial"],
   },
   {
     getter: (m) => m.freeCashFlowYield,
-    weight: 25,
+    weight: 15,
     lowerIsBetter: false,
     valid: (m) => m.freeCashFlowYield != null,
+  },
+  {
+    getter: (m) => m.priceToFfo,
+    weight: 20,
+    lowerIsBetter: true,
+    valid: (m) => m.priceToFfo != null && m.priceToFfo > 0,
+    includeOnlySectors: ["reit"],
   },
 ];
 
 const QUALITY_FIELDS: FactorField[] = [
   {
     getter: (m) => m.roe,
-    weight: 25,
+    weight: 16,
     lowerIsBetter: false,
     valid: (m) => m.roe != null,
   },
   {
     getter: (m) => m.roic,
-    weight: 25,
+    weight: 14,
     lowerIsBetter: false,
     valid: (m) => m.roic != null,
   },
   {
+    getter: (m) => m.roa,
+    weight: 12,
+    lowerIsBetter: false,
+    valid: (m) => m.roa != null,
+  },
+  {
     getter: (m) => m.operatingMargin,
-    weight: 20,
+    weight: 14,
     lowerIsBetter: false,
     valid: (m) => m.operatingMargin != null,
+    excludeSectors: ["financial", "reit"],
   },
   {
     getter: (m) => m.netMargin,
-    weight: 15,
+    weight: 12,
     lowerIsBetter: false,
     valid: (m) => m.netMargin != null,
   },
   {
-    getter: (m) => m.earningsStability,
-    weight: 15,
+    getter: (m) => m.grossMargin,
+    weight: 10,
     lowerIsBetter: false,
-    valid: (m) => m.earningsStability != null,
+    valid: (m) => m.grossMargin != null,
+    excludeSectors: ["financial", "reit"],
+  },
+  {
+    getter: (m) => m.fcfMargin,
+    weight: 12,
+    lowerIsBetter: false,
+    valid: (m) => m.fcfMargin != null,
+    excludeSectors: ["financial"],
+  },
+  {
+    getter: (m) => m.debtToEquity,
+    weight: 10,
+    lowerIsBetter: true,
+    valid: (m) => m.debtToEquity != null && m.debtToEquity >= 0,
+    excludeSectors: ["financial"],
+  },
+  {
+    getter: (m) => m.netInterestMargin,
+    weight: 18,
+    lowerIsBetter: false,
+    valid: (m) => m.netInterestMargin != null,
+    includeOnlySectors: ["financial"],
   },
 ];
 
 const GROWTH_FIELDS: FactorField[] = [
   {
     getter: (m) => m.revenueGrowth,
-    weight: 40,
+    weight: 25,
     lowerIsBetter: false,
     valid: (m) => m.revenueGrowth != null,
   },
   {
     getter: (m) => m.epsGrowth,
-    weight: 35,
+    weight: 25,
     lowerIsBetter: false,
     valid: (m) => m.epsGrowth != null,
   },
   {
-    getter: (m) => m.operatingMargin,
+    getter: (m) => m.operatingIncomeGrowth,
     weight: 25,
     lowerIsBetter: false,
-    valid: (m) => m.operatingMargin != null,
+    valid: (m) => m.operatingIncomeGrowth != null,
+    excludeSectors: ["financial"],
+  },
+  {
+    getter: (m) => m.fcfGrowth,
+    weight: 25,
+    lowerIsBetter: false,
+    valid: (m) => m.fcfGrowth != null,
+    excludeSectors: ["financial"],
+  },
+  {
+    getter: (m) => m.ffoGrowth,
+    weight: 30,
+    lowerIsBetter: false,
+    valid: (m) => m.ffoGrowth != null,
+    includeOnlySectors: ["reit"],
   },
 ];
 
 const MOMENTUM_FIELDS: FactorField[] = [
   {
+    getter: (m) => m.return1m,
+    weight: 12,
+    lowerIsBetter: false,
+    valid: (m) => m.return1m != null,
+  },
+  {
     getter: (m) => m.return3m,
-    weight: 25,
+    weight: 14,
     lowerIsBetter: false,
     valid: (m) => m.return3m != null,
   },
   {
     getter: (m) => m.return6m,
-    weight: 25,
+    weight: 14,
     lowerIsBetter: false,
     valid: (m) => m.return6m != null,
   },
   {
     getter: (m) => m.return12m,
-    weight: 35,
+    weight: 16,
     lowerIsBetter: false,
     valid: (m) => m.return12m != null,
   },
   {
-    getter: (m) => m.relativeStrength,
-    weight: 15,
+    getter: (m) => m.position52w,
+    weight: 14,
     lowerIsBetter: false,
-    valid: (m) => m.relativeStrength != null,
+    valid: (m) => m.position52w != null,
+  },
+  {
+    getter: (m) => m.maAbove20,
+    weight: 10,
+    lowerIsBetter: false,
+    valid: (m) => m.maAbove20 != null,
+  },
+  {
+    getter: (m) => m.maAbove60,
+    weight: 10,
+    lowerIsBetter: false,
+    valid: (m) => m.maAbove60 != null,
+  },
+  {
+    getter: (m) => m.maAbove200,
+    weight: 10,
+    lowerIsBetter: false,
+    valid: (m) => m.maAbove200 != null,
   },
 ];
 
 const STABILITY_FIELDS: FactorField[] = [
   {
-    getter: (m) => m.volatility,
-    weight: 35,
-    lowerIsBetter: true,
-    valid: (m) => m.volatility != null,
-  },
-  {
     getter: (m) => m.beta,
-    weight: 30,
+    weight: 20,
     lowerIsBetter: true,
     valid: (m) => m.beta != null,
   },
   {
+    getter: (m) => m.volatility,
+    weight: 20,
+    lowerIsBetter: true,
+    valid: (m) => m.volatility != null,
+  },
+  {
     getter: (m) => m.maxDrawdown,
-    weight: 35,
+    weight: 20,
     lowerIsBetter: true,
     valid: (m) => m.maxDrawdown != null,
   },
+  {
+    getter: (m) => m.debtToEquity,
+    weight: 20,
+    lowerIsBetter: true,
+    valid: (m) => m.debtToEquity != null && m.debtToEquity >= 0,
+    excludeSectors: ["financial"],
+  },
+  {
+    getter: (m) => m.currentRatio,
+    weight: 20,
+    lowerIsBetter: false,
+    valid: (m) => m.currentRatio != null && m.currentRatio > 0,
+    excludeSectors: ["financial", "reit"],
+  },
 ];
+
+const DIVIDEND_FIELDS: FactorField[] = [
+  {
+    getter: (m) => m.dividendYield,
+    weight: 30,
+    lowerIsBetter: false,
+    valid: (m) => m.dividendYield != null && m.dividendYield > 0,
+  },
+  {
+    getter: (m) => m.dividendGrowth,
+    weight: 25,
+    lowerIsBetter: false,
+    valid: (m) => m.dividendGrowth != null,
+  },
+  {
+    getter: (m) => m.payoutRatio,
+    weight: 20,
+    lowerIsBetter: true,
+    valid: (m) =>
+      m.payoutRatio != null && m.payoutRatio > 0 && m.payoutRatio <= 1.5,
+  },
+  {
+    getter: (m) => m.dividendConsistency,
+    weight: 25,
+    lowerIsBetter: false,
+    valid: (m) => m.dividendConsistency != null,
+  },
+];
+
+function applyDividendPayoutPenalty(
+  meta: FactorScoreMeta,
+  metrics: QuantMetrics
+): FactorScoreMeta {
+  if (meta.score <= 0) return meta;
+  const payout = metrics.payoutRatio;
+  if (payout == null) return meta;
+
+  let multiplier = 1;
+  if (payout > 0.9) multiplier = 0.65;
+  else if (payout > 0.75) multiplier = 0.82;
+
+  return {
+    ...meta,
+    score: Math.round(meta.score * multiplier),
+  };
+}
 
 export function computeValueScore(
   metrics: QuantMetrics,
   universe: QuantMetrics[]
 ): number {
-  return weightedFactorScore(universe, metrics, VALUE_FIELDS);
+  return weightedFactorScore(universe, metrics, VALUE_FIELDS).score;
 }
 
 export function computeQualityScore(
   metrics: QuantMetrics,
   universe: QuantMetrics[]
 ): number {
-  return weightedFactorScore(universe, metrics, QUALITY_FIELDS);
+  return weightedFactorScore(universe, metrics, QUALITY_FIELDS).score;
 }
 
 export function computeGrowthScore(
   metrics: QuantMetrics,
   universe: QuantMetrics[]
 ): number {
-  return weightedFactorScore(universe, metrics, GROWTH_FIELDS);
+  return weightedFactorScore(universe, metrics, GROWTH_FIELDS).score;
 }
 
 export function computeMomentumScore(
   metrics: QuantMetrics,
   universe: QuantMetrics[]
 ): number {
-  return weightedFactorScore(universe, metrics, MOMENTUM_FIELDS);
+  return weightedFactorScore(universe, metrics, MOMENTUM_FIELDS).score;
 }
 
 export function computeStabilityScore(
   metrics: QuantMetrics,
   universe: QuantMetrics[]
 ): number {
-  return weightedFactorScore(universe, metrics, STABILITY_FIELDS);
+  return weightedFactorScore(universe, metrics, STABILITY_FIELDS).score;
+}
+
+export function computeDividendScore(
+  metrics: QuantMetrics,
+  universe: QuantMetrics[]
+): number {
+  const meta = weightedFactorScore(universe, metrics, DIVIDEND_FIELDS);
+  return applyDividendPayoutPenalty(meta, metrics).score;
 }
 
 export function computeAllFactorScores(
   metrics: QuantMetrics,
   universe: QuantMetrics[]
 ): FactorScores {
+  return computeFactorBundle(metrics, universe).scores;
+}
+
+export function computeFactorBundle(
+  metrics: QuantMetrics,
+  universe: QuantMetrics[]
+): FactorScoreBundle {
+  const valueMeta = weightedFactorScore(universe, metrics, VALUE_FIELDS);
+  const qualityMeta = weightedFactorScore(universe, metrics, QUALITY_FIELDS);
+  const growthMeta = weightedFactorScore(universe, metrics, GROWTH_FIELDS);
+  const momentumMeta = weightedFactorScore(universe, metrics, MOMENTUM_FIELDS);
+  const stabilityMeta = weightedFactorScore(universe, metrics, STABILITY_FIELDS);
+  const dividendMeta = applyDividendPayoutPenalty(
+    weightedFactorScore(universe, metrics, DIVIDEND_FIELDS),
+    metrics
+  );
+
+  const meta: Record<FactorId, FactorScoreMeta> = {
+    value: valueMeta,
+    quality: qualityMeta,
+    growth: growthMeta,
+    momentum: momentumMeta,
+    stability: stabilityMeta,
+    dividend: dividendMeta,
+  };
+
+  const confidence = Object.fromEntries(
+    (Object.keys(meta) as FactorId[]).map((id) => [id, meta[id].confidence])
+  ) as Record<FactorId, DataConfidence>;
+
   return {
-    value: computeValueScore(metrics, universe),
-    quality: computeQualityScore(metrics, universe),
-    growth: computeGrowthScore(metrics, universe),
-    momentum: computeMomentumScore(metrics, universe),
-    stability: computeStabilityScore(metrics, universe),
+    scores: {
+      value: valueMeta.score,
+      quality: qualityMeta.score,
+      growth: growthMeta.score,
+      momentum: momentumMeta.score,
+      stability: stabilityMeta.score,
+      dividend: dividendMeta.score,
+    },
+    confidence,
+    meta,
   };
 }
 
@@ -248,8 +500,24 @@ export function computeFactorScore(
       return computeMomentumScore(metrics, universe);
     case "stability":
       return computeStabilityScore(metrics, universe);
+    case "dividend":
+      return computeDividendScore(metrics, universe);
   }
 }
+
+/** 멀티팩터 UI 슬라이더용 (배당 제외) */
+export const MULTI_FACTOR_UI_IDS: FactorId[] = [
+  "value",
+  "quality",
+  "growth",
+  "momentum",
+  "stability",
+];
+
+export const ALL_FACTOR_IDS: FactorId[] = [
+  ...MULTI_FACTOR_UI_IDS,
+  "dividend",
+];
 
 export const FACTOR_LABELS: Record<
   FactorId,
@@ -263,29 +531,26 @@ export const FACTOR_LABELS: Record<
   quality: {
     name: "퀄리티 (Quality)",
     shortName: "퀄리티",
-    description: "ROE, ROIC, 마진, 이익 안정성 기준 상대 순위",
+    description: "ROE, ROIC, 마진, 부채비율 기준 상대 순위",
   },
   growth: {
     name: "성장 (Growth)",
     shortName: "성장",
-    description: "매출·EPS·영업이익 성장률 기준 상대 순위",
+    description: "매출·EPS·영업이익·FCF 성장률 기준 상대 순위",
   },
   momentum: {
     name: "모멘텀 (Momentum)",
     shortName: "모멘텀",
-    description: "3·6·12개월 수익률 기준 상대 순위",
+    description: "1·3·6·12개월 수익률 및 이동평균 기준 상대 순위",
   },
   stability: {
-    name: "안정성 (Low Volatility)",
+    name: "안정성 (Stability)",
     shortName: "안정성",
-    description: "변동성, 베타, MDD 기준 상대 순위",
+    description: "베타, 변동성, MDD, 유동비율 기준 상대 순위",
+  },
+  dividend: {
+    name: "배당 (Dividend)",
+    shortName: "배당",
+    description: "배당수익률, 성장, 지급비율, 일관성 기준 상대 순위",
   },
 };
-
-export const ALL_FACTOR_IDS: FactorId[] = [
-  "value",
-  "quality",
-  "growth",
-  "momentum",
-  "stability",
-];

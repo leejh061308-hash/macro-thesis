@@ -13,7 +13,7 @@ import type {
   StockFactorDetailResponse,
   UniverseId,
 } from "@/lib/quant/types";
-import { FACTOR_LABELS } from "@/lib/quant/factors";
+import { FACTOR_LABELS, ALL_FACTOR_IDS } from "@/lib/quant/factors";
 
 interface StockFactorDetailProps {
   viewMode: QuantViewMode;
@@ -162,7 +162,7 @@ export default function StockFactorDetail({
           </Card>
 
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {(Object.keys(FACTOR_LABELS) as FactorId[]).map((f) => (
+            {(ALL_FACTOR_IDS as FactorId[]).map((f) => (
               <Card key={f} padding="sm">
                 <p className="text-[10px] text-muted">
                   {FACTOR_LABELS[f].shortName}
@@ -172,6 +172,9 @@ export default function StockFactorDetail({
                 </p>
                 {detail.factorRanks[f] > 0 && (
                   <p className="text-[10px] text-muted">#{detail.factorRanks[f]}</p>
+                )}
+                {detail.factorConfidence?.[f] === "low" && (
+                  <p className="mt-0.5 text-[9px] text-amber-400">데이터 신뢰도 낮음</p>
                 )}
               </Card>
             ))}
@@ -200,7 +203,7 @@ export default function StockFactorDetail({
 }
 
 function FactorBarChart({ factors }: { factors: Record<FactorId, number> }) {
-  const items = (Object.keys(FACTOR_LABELS) as FactorId[])
+  const items = (ALL_FACTOR_IDS as FactorId[])
     .map((f) => ({ factor: f, label: FACTOR_LABELS[f].shortName, score: factors[f] }))
     .sort((a, b) => b.score - a.score);
 

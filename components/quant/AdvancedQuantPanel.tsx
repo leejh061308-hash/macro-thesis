@@ -41,13 +41,13 @@ export default function AdvancedQuantPanel({
     strategyId === "custom"
       ? "커스텀 멀티팩터"
       : (MULTI_FACTOR_STRATEGIES.find((s) => s.id === strategyId)?.name ??
-        "All Factor");
+        "Balanced Strategy");
 
   const strategyShortName =
     strategyId === "custom"
       ? "커스텀"
       : (MULTI_FACTOR_STRATEGIES.find((s) => s.id === strategyId)?.shortName ??
-        "올팩터");
+        "균형");
 
   return (
     <div className="space-y-5">

@@ -1,7 +1,9 @@
 import { computeAllFactorScores } from "./factors";
 import { FACTOR_LABELS } from "./factors";
+import { buildDetailedFactorSummary } from "./factor-explanations";
 import type {
   FactorId,
+  FactorScores,
   FactorWeights,
   MultiFactorStrategyDefinition,
   MultiFactorStrategyId,
@@ -41,12 +43,18 @@ export const MULTI_FACTOR_STRATEGIES: MultiFactorStrategyDefinition[] = [
   },
   {
     id: "all-factor",
-    name: "All Factor",
-    shortName: "올팩터",
-    description: "5대 팩터를 균등 가중치로 결합",
+    name: "Balanced Strategy",
+    shortName: "균형",
+    description: "5대 팩터를 균형 가중치로 결합",
     aiSummary:
-      "가치·퀄리티·성장·모멘텀을 각 25%씩 결합한 멀티팩터 전략입니다.",
-    defaultWeights: { value: 25, quality: 25, growth: 25, momentum: 25 },
+      "퀄리티 30% · 성장 25% · 모멘텀 20% · 가치 15% · 안정성 10% 균형 전략입니다.",
+    defaultWeights: {
+      quality: 30,
+      growth: 25,
+      momentum: 20,
+      value: 15,
+      stability: 10,
+    },
     icon: "◎",
   },
 ];
@@ -88,13 +96,34 @@ export function resolveWeights(
   if (strategyId !== "custom") {
     return getMultiFactorStrategy(strategyId).defaultWeights;
   }
-  return { value: 25, quality: 25, growth: 25, momentum: 25 };
+  return {
+    quality: 30,
+    growth: 25,
+    momentum: 20,
+    value: 15,
+    stability: 10,
+  };
 }
 
 export function buildAiFactorSummary(
-  factors: ReturnType<typeof computeAllFactorScores>,
-  overallScore: number
+  factors: FactorScores,
+  overallScore: number,
+  options?: {
+    metrics?: QuantMetrics;
+    confidence?: Partial<Record<FactorId, import("./types").DataConfidence>>;
+    weights?: FactorWeights;
+  }
 ): string {
+  if (options?.metrics) {
+    return buildDetailedFactorSummary(
+      options.metrics,
+      factors,
+      options.confidence ?? {},
+      overallScore,
+      options.weights
+    );
+  }
+
   const entries = (Object.entries(factors) as [FactorId, number][]).sort(
     (a, b) => b[1] - a[1]
   );
@@ -102,10 +131,10 @@ export function buildAiFactorSummary(
   const topLabel = (f: FactorId) => FACTOR_LABELS[f].shortName;
 
   if (overallScore >= 90) {
-    return `이 종목은 전체 유니버스 상위 ${Math.max(1, 100 - overallScore + 1)}%에 속하며 ${topLabel(top[0]?.[0] ?? "quality")}와 ${topLabel(top[1]?.[0] ?? "growth")} 팩터가 강점입니다.`;
+    return `이 종목은 전체 유니버스 상위권에 속하며 ${topLabel(top[0]?.[0] ?? "quality")}와 ${topLabel(top[1]?.[0] ?? "growth")} 팩터가 강점입니다.`;
   }
   if (overallScore >= 70) {
-    return `전체 유니버스 상위 ${100 - overallScore + 1}% 수준이며 ${topLabel(top[0]?.[0] ?? "quality")}(${top[0]?.[1]}), ${topLabel(top[1]?.[0] ?? "growth")}(${top[1]?.[1]}) 팩터 점수가 상대적으로 높습니다.`;
+    return `전체 유니버스 상위권이며 ${topLabel(top[0]?.[0] ?? "quality")}(${top[0]?.[1]}), ${topLabel(top[1]?.[0] ?? "growth")}(${top[1]?.[1]}) 팩터 점수가 상대적으로 높습니다.`;
   }
   return `전체 유니버스 대비 중하위권(${overallScore}점)이며 ${topLabel(top[0]?.[0] ?? "quality")} 팩터가 상대적 강점입니다.`;
 }

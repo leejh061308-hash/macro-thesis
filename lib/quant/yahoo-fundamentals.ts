@@ -69,39 +69,56 @@ function applyFromQuoteSummary(
     debtToEquity?: number;
     operatingMargins?: number;
     profitMargins?: number;
+    grossMargins?: number;
     revenueGrowth?: number;
     earningsGrowth?: number;
     freeCashflow?: number;
+    operatingCashflow?: number;
+    currentRatio?: number;
+    ebitdaGrowth?: number;
   } | undefined,
   ks: {
     trailingPE?: number;
+    forwardPE?: number;
     priceToBook?: number;
     pegRatio?: number;
     payoutRatio?: number;
     beta?: number;
     returnOnEquity?: number;
+    priceToFreeCashFlow?: number;
   } | undefined
 ): void {
   if (m.peRatio == null) {
     m.peRatio = num(sd?.trailingPE) ?? num(ks?.trailingPE);
   }
+  if (m.forwardPE == null) m.forwardPE = num(ks?.forwardPE);
   if (m.pbRatio == null) m.pbRatio = num(ks?.priceToBook);
   if (m.pegRatio == null) m.pegRatio = num(ks?.pegRatio);
   if (m.roe == null) m.roe = pct(fd?.returnOnEquity);
+  if (m.roa == null) m.roa = pct(fd?.returnOnAssets);
   if (m.roic == null) m.roic = pct(ks?.returnOnEquity ?? fd?.returnOnAssets);
   if (m.debtToEquity == null) m.debtToEquity = num(fd?.debtToEquity);
   if (m.operatingMargin == null) m.operatingMargin = pct(fd?.operatingMargins);
   if (m.netMargin == null) m.netMargin = pct(fd?.profitMargins);
+  if (m.grossMargin == null) m.grossMargin = pct(fd?.grossMargins);
   if (m.revenueGrowth == null) m.revenueGrowth = pct(fd?.revenueGrowth);
   if (m.epsGrowth == null) m.epsGrowth = pct(fd?.earningsGrowth);
+  if (m.operatingIncomeGrowth == null) {
+    m.operatingIncomeGrowth = pct(fd?.ebitdaGrowth);
+  }
+  if (m.currentRatio == null) m.currentRatio = num(fd?.currentRatio);
   if (m.dividendYield == null) m.dividendYield = pct(sd?.dividendYield);
   if (m.payoutRatio == null) m.payoutRatio = pct(ks?.payoutRatio);
   if (m.beta == null) m.beta = num(ks?.beta);
+  if (m.priceToFCF == null) m.priceToFCF = num(ks?.priceToFreeCashFlow);
 
   const marketCap = num(sd?.marketCap);
   const fcf = num(fd?.freeCashflow);
   if (m.freeCashFlowYield == null && fcf != null && marketCap != null && marketCap > 0) {
     m.freeCashFlowYield = fcf / marketCap;
+    if (m.fcfMargin == null && fcf > 0) {
+      m.fcfMargin = fcf / marketCap;
+    }
   }
   if (m.marketCap == null && marketCap != null) {
     m.marketCap = marketCap;

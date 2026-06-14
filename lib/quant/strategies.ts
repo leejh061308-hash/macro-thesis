@@ -5,6 +5,7 @@ import {
   isThemeStrategy,
   passesThemeFilter,
 } from "./sectors";
+import { computeGrowthScore, computeDividendScore } from "./factors";
 import { computeStrategyFactorScore } from "./strategy-factors";
 import { buildSelectionReasons } from "./strategy-reasons";
 import type {
@@ -254,17 +255,9 @@ export function computeStrategyScore(
         { score: scoreField(universe, ticker, (m) => m.freeCashFlowYield, false), weight: 20, valid: metrics.freeCashFlowYield != null },
       ]);
     case "growth":
-      return weightedScore([
-        { score: scoreField(universe, ticker, (m) => m.revenueGrowth, false), weight: 40, valid: metrics.revenueGrowth != null },
-        { score: scoreField(universe, ticker, (m) => m.epsGrowth, false), weight: 35, valid: metrics.epsGrowth != null },
-        { score: scoreField(universe, ticker, (m) => m.operatingMargin, false), weight: 25, valid: metrics.operatingMargin != null },
-      ]);
+      return computeGrowthScore(metrics, universe);
     case "dividend":
-      return weightedScore([
-        { score: scoreField(universe, ticker, (m) => m.dividendYield, false), weight: 40, valid: metrics.dividendYield != null && metrics.dividendYield > 0 },
-        { score: scoreField(universe, ticker, (m) => m.dividendGrowth, false), weight: 35, valid: metrics.dividendGrowth != null },
-        { score: scoreField(universe, ticker, (m) => m.payoutRatio, true), weight: 25, valid: metrics.payoutRatio != null && metrics.payoutRatio > 0 && metrics.payoutRatio < 1 },
-      ]);
+      return computeDividendScore(metrics, universe);
     case "quality-factor":
       return weightedScore([
         { score: scoreField(universe, ticker, (m) => m.roe, false), weight: 25, valid: metrics.roe != null },
@@ -380,9 +373,9 @@ export function rankByStrategy(
 
   const scored = pool
     .map((m) => {
-      const legacy = computeStrategyScore(strategyId, m, fullUniverse);
       const factor = computeStrategyFactorScore(strategyId, m, fullUniverse);
-      const strategyScore = legacy > 0 ? legacy : factor;
+      const legacy = computeStrategyScore(strategyId, m, fullUniverse);
+      const strategyScore = factor > 0 ? factor : legacy;
       return {
         ticker: m.ticker,
         name: m.name,

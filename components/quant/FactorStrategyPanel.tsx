@@ -9,7 +9,7 @@ import type {
   MultiFactorStrategyId,
   UniverseId,
 } from "@/lib/quant/types";
-import { FACTOR_LABELS } from "@/lib/quant/factors";
+import { FACTOR_LABELS, MULTI_FACTOR_UI_IDS } from "@/lib/quant/factors";
 
 const UNIVERSE_OPTIONS: { value: UniverseId; label: string; shortLabel: string }[] = [
   { value: "combined", label: "S&P500 + Nasdaq100", shortLabel: "통합" },
@@ -154,7 +154,7 @@ export default function FactorStrategyPanel({
               <span className="text-[10px] text-neutral">합계 {totalWeight}%</span>
             </div>
             <div className="space-y-3">
-              {(Object.keys(FACTOR_LABELS) as FactorId[]).map((factor) => (
+              {(MULTI_FACTOR_UI_IDS as FactorId[]).map((factor) => (
                 <div key={factor}>
                   <div className="mb-1 flex justify-between text-[10px]">
                     <span className="text-gray-400">{FACTOR_LABELS[factor].name}</span>

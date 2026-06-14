@@ -19,7 +19,10 @@ export type FactorId =
   | "quality"
   | "growth"
   | "momentum"
-  | "stability";
+  | "stability"
+  | "dividend";
+
+export type DataConfidence = "high" | "medium" | "low";
 
 export type MultiFactorStrategyId =
   | "value-quality"
@@ -46,7 +49,10 @@ export interface FactorScores {
   growth: number;
   momentum: number;
   stability: number;
+  dividend: number;
 }
+
+export type FactorConfidence = Partial<Record<FactorId, DataConfidence>>;
 
 export type FactorRanks = FactorScores;
 
@@ -56,6 +62,7 @@ export interface FactorWeights {
   growth?: number;
   momentum?: number;
   stability?: number;
+  dividend?: number;
 }
 
 export interface MultiFactorStrategyDefinition {
@@ -73,8 +80,10 @@ export interface RankingEntry {
   name: string;
   factors: FactorScores;
   factorRanks: FactorRanks;
+  factorConfidence?: FactorConfidence;
   overallScore: number;
   overallRank: number;
+  timingScore?: number | null;
   aiSummary: string;
 }
 
@@ -154,6 +163,23 @@ export interface QuantMetrics {
   relativeStrength: number | null;
   earningsStability: number | null;
   cashFlowStability: number | null;
+  operatingIncomeGrowth: number | null;
+  fcfGrowth: number | null;
+  roa: number | null;
+  grossMargin: number | null;
+  fcfMargin: number | null;
+  forwardPE: number | null;
+  priceToFCF: number | null;
+  return1m: number | null;
+  position52w: number | null;
+  maAbove20: number | null;
+  maAbove60: number | null;
+  maAbove200: number | null;
+  currentRatio: number | null;
+  dividendConsistency: number | null;
+  priceToFfo: number | null;
+  ffoGrowth: number | null;
+  netInterestMargin: number | null;
 }
 
 export interface StrategyResult {

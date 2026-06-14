@@ -8,6 +8,7 @@ const STYLE_LABELS: Record<FactorId, string> = {
   growth: "성장주",
   momentum: "모멘텀",
   stability: "안정주",
+  dividend: "배당주",
 };
 
 export interface BasicStockView {

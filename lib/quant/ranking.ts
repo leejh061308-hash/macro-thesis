@@ -1,4 +1,4 @@
-import { ALL_FACTOR_IDS, computeAllFactorScores } from "./factors";
+import { ALL_FACTOR_IDS, computeFactorBundle } from "./factors";
 import { buildAiFactorSummary, computeMultiFactorScore } from "./multi-factor";
 import type {
   FactorId,
@@ -10,6 +10,17 @@ import type {
   StockFactorDetailResponse,
   StockMetricsSummary,
 } from "./types";
+
+function emptyFactorRanks(): FactorRanks {
+  return {
+    value: 0,
+    quality: 0,
+    growth: 0,
+    momentum: 0,
+    stability: 0,
+    dividend: 0,
+  };
+}
 
 function computeRanks(
   scores: Map<string, number>
@@ -37,13 +48,7 @@ function buildFactorRanks(
     }
     const ranks = computeRanks(scores);
     for (const [ticker, rank] of ranks) {
-      const existing = result.get(ticker) ?? {
-        value: 0,
-        quality: 0,
-        growth: 0,
-        momentum: 0,
-        stability: 0,
-      };
+      const existing = result.get(ticker) ?? emptyFactorRanks();
       existing[factorId] = rank;
       result.set(ticker, existing);
     }
@@ -58,18 +63,22 @@ export function buildUniverseRanking(
   limit = 100
 ): RankingEntry[] {
   const factorScores = new Map<string, FactorScores>();
+  const factorConfidence = new Map<string, RankingEntry["factorConfidence"]>();
+
   for (const m of universe) {
-    factorScores.set(m.ticker, computeAllFactorScores(m, universe));
+    const bundle = computeFactorBundle(m, universe);
+    factorScores.set(m.ticker, bundle.scores);
+    factorConfidence.set(m.ticker, bundle.confidence);
   }
 
   const factorRanks = buildFactorRanks(universe, factorScores);
 
   const defaultWeights: FactorWeights = weights ?? {
-    value: 20,
-    quality: 20,
-    growth: 20,
+    quality: 30,
+    growth: 25,
     momentum: 20,
-    stability: 20,
+    value: 15,
+    stability: 10,
   };
 
   const overallScores = new Map<string, number>();
@@ -85,20 +94,20 @@ export function buildUniverseRanking(
     .map((m) => {
       const factors = factorScores.get(m.ticker)!;
       const overallScore = overallScores.get(m.ticker) ?? 0;
+      const confidence = factorConfidence.get(m.ticker);
       return {
         ticker: m.ticker,
         name: m.name,
         factors,
-        factorRanks: factorRanks.get(m.ticker) ?? {
-          value: 0,
-          quality: 0,
-          growth: 0,
-          momentum: 0,
-          stability: 0,
-        },
+        factorRanks: factorRanks.get(m.ticker) ?? emptyFactorRanks(),
+        factorConfidence: confidence,
         overallScore,
         overallRank: overallRanks.get(m.ticker) ?? 0,
-        aiSummary: buildAiFactorSummary(factors, overallScore),
+        aiSummary: buildAiFactorSummary(factors, overallScore, {
+          metrics: m,
+          confidence,
+          weights: defaultWeights,
+        }),
       };
     })
     .filter((e) => e.overallScore > 0)
@@ -120,6 +129,7 @@ export function rankByFactor(
     growth: factorId === "growth" ? 100 : 0,
     momentum: factorId === "momentum" ? 100 : 0,
     stability: factorId === "stability" ? 100 : 0,
+    dividend: factorId === "dividend" ? 100 : 0,
   };
   return buildUniverseRanking(universe, weights, limit);
 }
@@ -157,18 +167,29 @@ export function getStockFactorDetail(
 
   if (entry) return { ...entry, metrics };
 
-  const factors = computeAllFactorScores(m, universe);
-  const w = weights ?? { value: 20, quality: 20, growth: 20, momentum: 20, stability: 20 };
+  const bundle = computeFactorBundle(m, universe);
+  const w = weights ?? {
+    quality: 30,
+    growth: 25,
+    momentum: 20,
+    value: 15,
+    stability: 10,
+  };
   const overallScore = computeMultiFactorScore(m, universe, w);
 
   return {
     ticker: m.ticker,
     name: m.name,
-    factors,
-    factorRanks: { value: 0, quality: 0, growth: 0, momentum: 0, stability: 0 },
+    factors: bundle.scores,
+    factorRanks: emptyFactorRanks(),
+    factorConfidence: bundle.confidence,
     overallScore,
     overallRank: 0,
-    aiSummary: buildAiFactorSummary(factors, overallScore),
+    aiSummary: buildAiFactorSummary(bundle.scores, overallScore, {
+      metrics: m,
+      confidence: bundle.confidence,
+      weights: w,
+    }),
     metrics,
   };
 }

@@ -21,6 +21,7 @@ const FACTOR_COLORS: Record<FactorId, string> = {
   growth: "text-sky-400",
   momentum: "text-violet-400",
   stability: "text-rose-400",
+  dividend: "text-teal-400",
 };
 
 interface RankingPanelProps {

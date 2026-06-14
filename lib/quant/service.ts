@@ -76,10 +76,10 @@ import type {
 
 const DEFAULT_PORTFOLIO_SIZE = 20;
 
-const UNIVERSE_CACHE_VERSION = "v9";
+const UNIVERSE_CACHE_VERSION = "v10";
 export const SCORING_METRICS_CACHE_KEY = `scoring-metrics-${UNIVERSE_CACHE_VERSION}`;
 const SCORING_CACHE_KEY = SCORING_METRICS_CACHE_KEY;
-const OVERVIEW_CACHE_KEY = "strategy-overview-v10";
+const OVERVIEW_CACHE_KEY = "strategy-overview-v11";
 
 let fullUniverseInFlight: Promise<void> | null = null;
 let scoringInFlight: Promise<QuantMetrics[]> | null = null;

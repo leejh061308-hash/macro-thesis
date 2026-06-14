@@ -75,6 +75,23 @@ function emptyMetrics(ticker: string, name: string, marketCap: number | null): Q
     relativeStrength: null,
     earningsStability: null,
     cashFlowStability: null,
+    operatingIncomeGrowth: null,
+    fcfGrowth: null,
+    roa: null,
+    grossMargin: null,
+    fcfMargin: null,
+    forwardPE: null,
+    priceToFCF: null,
+    return1m: null,
+    position52w: null,
+    maAbove20: null,
+    maAbove60: null,
+    maAbove200: null,
+    currentRatio: null,
+    dividendConsistency: null,
+    priceToFfo: null,
+    ffoGrowth: null,
+    netInterestMargin: null,
   };
 }
 
@@ -177,6 +194,23 @@ async function fetchOne(ticker: string): Promise<QuantMetrics | null> {
     relativeStrength,
     earningsStability,
     cashFlowStability,
+    operatingIncomeGrowth: pct(m.operatingIncomeGrowthTTMYoy),
+    fcfGrowth: pct(m.fcfGrowthRate5Y),
+    roa: pct(m.roaTTM) ?? pct(m.roaRfy),
+    grossMargin: pct(m.grossMarginTTM),
+    fcfMargin: pct(m.fcfMarginTTM),
+    forwardPE: num(m.peForward),
+    priceToFCF: num(m.currentEvToFreeCashFlowAnnual),
+    return1m: returnPct(m["4WeekPriceReturnDaily"]),
+    position52w: null,
+    maAbove20: null,
+    maAbove60: null,
+    maAbove200: null,
+    currentRatio: num(m.currentRatioAnnual),
+    dividendConsistency: null,
+    priceToFfo: null,
+    ffoGrowth: null,
+    netInterestMargin: null,
   };
 }
 
@@ -210,7 +244,12 @@ export async function enrichMomentumFromPrices(
   const spyReturn12m = computeTrailingReturn(spyPrices, 12);
 
   const needsEnrich = metrics.filter(
-    (m) => m.return12m == null || m.relativeStrength == null
+    (m) =>
+      m.return12m == null ||
+      m.relativeStrength == null ||
+      m.return1m == null ||
+      m.position52w == null ||
+      m.maAbove20 == null
   );
   if (needsEnrich.length === 0) return;
 
@@ -222,11 +261,39 @@ export async function enrichMomentumFromPrices(
       const prices = await fetchMonthlyPrices(m.ticker, range);
       if (prices.length < 4) continue;
 
+      const end = prices[prices.length - 1].close;
+
+      if (m.return1m == null) m.return1m = computeTrailingReturn(prices, 1);
       if (m.return3m == null) m.return3m = computeTrailingReturn(prices, 3);
       if (m.return6m == null) m.return6m = computeTrailingReturn(prices, 6);
       if (m.return12m == null) m.return12m = computeTrailingReturn(prices, 12);
       if (m.relativeStrength == null && m.return12m != null && spyReturn12m != null) {
         m.relativeStrength = m.return12m - spyReturn12m;
+      }
+
+      const recent = prices.slice(-13);
+      if (recent.length > 0 && m.position52w == null) {
+        const maxClose = Math.max(...recent.map((p) => p.close));
+        if (maxClose > 0) m.position52w = end / maxClose;
+      }
+
+      const avg = (n: number) => {
+        const slice = prices.slice(-Math.min(n, prices.length));
+        if (slice.length === 0) return null;
+        return slice.reduce((s, p) => s + p.close, 0) / slice.length;
+      };
+
+      if (m.maAbove20 == null) {
+        const a = avg(1);
+        if (a != null) m.maAbove20 = end > a ? 1 : 0;
+      }
+      if (m.maAbove60 == null) {
+        const a = avg(3);
+        if (a != null) m.maAbove60 = end > a ? 1 : 0;
+      }
+      if (m.maAbove200 == null) {
+        const a = avg(12);
+        if (a != null) m.maAbove200 = end > a ? 1 : 0;
       }
     }
   }
@@ -264,11 +331,23 @@ export async function fetchUniverseProfiles(
   return results.filter((m): m is QuantMetrics => m != null);
 }
 
+export function deriveComputedMetrics(metrics: QuantMetrics[]): void {
+  for (const m of metrics) {
+    if (m.priceToFCF == null && m.freeCashFlowYield != null && m.freeCashFlowYield > 0) {
+      m.priceToFCF = 1 / m.freeCashFlowYield;
+    }
+    if (m.dividendConsistency == null && m.earningsStability != null) {
+      m.dividendConsistency = m.earningsStability;
+    }
+  }
+}
+
 export async function enrichScoringPool(metrics: QuantMetrics[]): Promise<void> {
   await enrichFundamentalsFromYahoo(metrics, { concurrency: 6 });
   await enrichGrowthFields(metrics);
   await enrichValueFields(metrics);
   await enrichMomentumFromPrices(metrics, { range: "3y", concurrency: 6 });
+  deriveComputedMetrics(metrics);
 }
 
 /** 성장률만 보강 — 캐시 hit 시 lazy 호출용 */
